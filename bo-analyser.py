@@ -112,31 +112,6 @@ def run():
     state = State()
     analyse_frame("main")
 
-    vulnerabilities = [
-        {
-            "vulnerability": "RBPOVERFLOW",
-            "overflow_var": "buf4",
-            "vuln_function": "main",
-            "address": "4005ad",
-            "fnname": "strcat"
-        },
-        {
-            "vulnerability": "RETOVERFLOW",
-            "overflow_var": "buf4",
-            "vuln_function": "main",
-            "address": "4005ad",
-            "fnname": "strcat"
-        },
-        {
-            "overflown_address": "rbp+0x10",
-            "fnname": "strcat",
-            "vuln_function": "main",
-            "address": "4005ad",
-            "vulnerability": "SCORRUPTION",
-            "overflow_var": "buf4"
-        }
-    ]
-
     f = open(file_out, 'w')
     f.write(json.dumps(vulnerabilities, indent=4, separators=(',', ': ')))
 
