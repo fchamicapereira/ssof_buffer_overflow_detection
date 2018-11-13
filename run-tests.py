@@ -48,5 +48,6 @@ for f in files:
 
     if equal(result, solution):
         print '+ [PASSED] ' + filename_in
+        subprocess.call(['rm', './' + filename_result])
     else:
         print '  [FAILED] ' + filename_in
