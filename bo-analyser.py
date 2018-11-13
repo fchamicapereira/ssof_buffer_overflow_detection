@@ -3,7 +3,7 @@ import json
 import sys
 import os
 
-global state
+global states
 global program
 global file_out
 global vulnerabilities
@@ -14,7 +14,7 @@ global currentRetOvf
 # ----------------------------------
 
 class State:
-    def __init__(self):
+    def __init__(self, vars, args=[]):
         self.registers = {}
 
         for reg in (
@@ -25,13 +25,26 @@ class State:
         ):
             self.registers[reg] = None
 
+        self.registers["rsp"] = 0
         self.args = {
             "regs": ("rdi","rsi","rdx","rcx","r8","r9"),
-            "saved": []
+            "saved": [],
+            "current": args
         }
 
         self.vars = []
         self.non_assigned_mem = []
+
+        result = []
+        for v in vars:
+            v["rbp_rel_pos"] = int(v["address"][3:], 16) # pos relative to rbp
+            result.append(v)
+        
+        # sort by position in stack
+        result = sorted(result, key = lambda v: v['rbp_rel_pos']) 
+
+        self.vars = result
+        self.calc_non_assigned_memory()
 
     def args_add(self, reg, value):
         data = { "reg": reg, "value": value }
@@ -43,20 +56,39 @@ class State:
 
         self.args["saved"].insert(0, data)
 
-    def update_non_assigned_memory(self):
-        non_assigned_mem = []
+    def args_get(self, reg):
+        for arg in self.args["current"]:
+            
+            if not isinstance(arg["value"], dict):
+                continue
+
+            if "address" in arg["value"].keys() and arg["value"]["address"] == reg:
+                return arg["value"]
+
+        return None
+
+    def calc_non_assigned_memory(self):
+        self.non_assigned_mem = []
         saved_pos = None
         saved_size = None
         
         if len(self.vars) == 0:
             return
 
+        rsp = self.read("rsp")
+
+        if len(self.vars) > 0 and rsp < self.vars[0]["rbp_rel_pos"]:
+            self.non_assigned_mem.append({
+                "start": rsp,
+                "end": self.vars[0]["rbp_rel_pos"]
+            })
+        
         for var in self.vars:
             size = var["bytes"]
             pos = var["rbp_rel_pos"]
 
             if saved_pos != None and saved_size != None and pos > saved_pos + saved_size:
-                non_assigned_mem.append({
+                self.non_assigned_mem.append({
                     "start": saved_pos + saved_size,
                     "end": pos - 1
                 })
@@ -65,28 +97,12 @@ class State:
             saved_size = size
         
         if saved_pos + saved_size < 0:
-            non_assigned_mem.append({
+            self.non_assigned_mem.append({
                 "start": saved_pos + saved_size,
                 "end": -1
             })
 
-        self.non_assigned_mem = non_assigned_mem
-
-    def enter_frame(self, vars):
-        result = []
-        for v in vars:
-            v["rbp_rel_pos"] = int(v["address"][3:], 16) # pos relative to rbp
-            result.append(v)
-        
-        # sort by position in stack
-        result = sorted(result, key = lambda v: v['rbp_rel_pos']) 
-
-        self.vars = result
-        self.update_non_assigned_memory()
-
-    def exit_frame(self, vars):
-        self.args["saved"] = []
-        self.non_assigned_mem = []
+        print 'nam', self.non_assigned_mem
 
     def read(self, reg):
         return None if reg not in self.registers.keys() else self.registers[reg]
@@ -99,18 +115,8 @@ class State:
         if reg in self.args["regs"]:
             self.args_add(reg, value)
 
-    def isRegistryDestination(self, inst):
-        if "args" not in inst.keys() or "dest" not in inst["args"].keys():
-            return False
-        
-        reg = inst["args"]["dest"]
-        
-        if reg not in state.registers.keys():
-            return False
-
-        return True
-
 def setup():
+    global states
     global file_in, file_out
     global program
     global vulnerabilities
@@ -119,7 +125,8 @@ def setup():
     if len(sys.argv) < 2:
         print "Missing json argument"
         exit()
-
+    
+    states = []
     file_in = sys.argv[1]
     filename_split = os.path.splitext(file_in)
     vulnerabilities = []
@@ -135,11 +142,17 @@ def setup():
     program = json.loads(program_json)
 
 def analyse_frame(func):
-    global state
+    global states
     global program
 
-    printArgs()
-    state.enter_frame(program[func]["variables"])
+    vars = program[func]["variables"]
+
+    if len(states) > 0 and states[len(states) - 1].args["saved"]:
+        args = states[len(states) - 1].args["saved"]
+        states.append(State(vars, args))
+    else:
+        states.append(State(vars))
+
     print "begin <%s>" % (func)
 
     for inst in program[func]["instructions"]:
@@ -147,15 +160,16 @@ def analyse_frame(func):
         op = inst["op"]
         handleOp(op, func, inst)
 
+    states.pop()
+
     print "end <%s>" % (func)
 
 def run():
-    global state
+    global states
     global file_out
     global vulnerabilities
 
     setup()
-    state = State()
     analyse_frame("main")
 
     f = open(file_out, 'w')
@@ -264,8 +278,9 @@ def handleDng(dngFunc, vuln_func, inst):
     # with this function, everything can be overflown
     def gets(vuln_func, inst):
         global program
-        global state
+        global states
 
+        state = states[len(states) - 1]
         addr = inst["address"]
         arg = state.args["saved"][0]["value"]
         vars = list(filter(lambda v: v["address"] != arg["address"], state.vars))
@@ -290,17 +305,23 @@ def handleDng(dngFunc, vuln_func, inst):
 
     def strcpy(vuln_func, inst):
         global program
-        global state
+        global states
+
+        state = states[len(states) - 1]
         # TODO
 
     def strcat(vuln_func, inst):
         global program
-        global state
+        global states
+
+        state = states[len(states) - 1]
         # TODO
 
     def fgets(vuln_func, inst):
         global program
-        global state
+        global states
+
+        state = states[len(states) - 1]
 
         # char * fgets(char * restrict str, int size, FILE * restrict stream);
         # reads $size - 1 bytes but writes $size (last byte is \0)
@@ -310,12 +331,12 @@ def handleDng(dngFunc, vuln_func, inst):
 
         dest["size"] = size
 
-        print size, dest["bytes"]
         # no overflow
         if size <= dest["bytes"]:
             return
 
         # overflow
+        print dest, dest["bytes"], size
         excess = dest["bytes"] - size
         print '!!! overflow of %d bytes with fgets' % excess
 
@@ -323,7 +344,9 @@ def handleDng(dngFunc, vuln_func, inst):
 
     def strncpy(vuln_func, inst):
         global program
-        global state
+        global states
+
+        state = states[len(states) - 1]
 
 
 
@@ -331,34 +354,46 @@ def handleDng(dngFunc, vuln_func, inst):
 
     def strncat(vuln_func, inst):
         global program
-        global state
+        global states
+
+        state = states[len(states) - 1]
         # TODO
 
     # --------- ADVANCED ---------
 
     def sprintf(vuln_func, inst):
         global program
-        global state
+        global states
+
+        state = states[len(states) - 1]
         # TODO
 
     def scanf(vuln_func, inst):
         global program
-        global state
+        global states
+
+        state = states[len(states) - 1]
         # TODO
 
     def fscanf(vuln_func, inst):
         global program
-        global state
+        global states
+
+        state = states[len(states) - 1]
         # TODO
 
     def snprintf(vuln_func, inst):
         global program
-        global state
+        global states
+
+        state = states[len(states) - 1]
         # TODO
 
     def read(vuln_func, inst):
         global program
-        global state
+        global states
+
+        state = states[len(states) - 1]
         # TODO
 
     dng = {
@@ -385,21 +420,27 @@ def handleDng(dngFunc, vuln_func, inst):
 def handleOp(op, func, inst):
     def call(func, inst):
         global program
-        global state
+        global states
+
+        state = states[len(states) - 1]
+        printArgs()
 
         newFunc = inst["args"]["fnname"][1:-1] # <funcion-name> or <function-name>@plt
 
         if newFunc in program.keys():
             analyse_frame(newFunc)
-            state.exit_frame(program[func]["variables"])
 
         elif '@' in newFunc:
             newFunc = newFunc.split('@')[0]
-            printArgs()
             handleDng(newFunc, func, inst)
+        
+        state.args["saved"] = []
 
     def lea(func, inst):
         global program
+        global states
+
+        state = states[len(states) - 1]
 
         value = inst["args"]["value"]
         dest = inst["args"]["dest"]
@@ -424,7 +465,9 @@ def handleOp(op, func, inst):
             state.write(dest, var)
 
     def mov(func, inst):
-        global state
+        global states
+
+        state = states[len(states) - 1]
 
         # TODO handle all the possible cases of mov arguments (are all needed?)
         # register to register
@@ -435,33 +478,58 @@ def handleOp(op, func, inst):
         
         vars = program[func]["variables"]
 
-        if not state.isRegistryDestination(inst):
-            return
-
         dest = inst["args"]["dest"]
         value = inst["args"]["value"]
 
+        if dest not in state.registers:
+            return
+        
         if "WORD" in value:
             value = value.split(' ')[2][1:-1]
-            match = filter(lambda var: var["address"] == value, vars)
 
-            if len(match) < 1:
-                state.write(dest, value)
+            if state.args_get(value) != None:
+                state.write(dest, state.args_get(value))
+            
             else:
-                state.write(dest, match[0])
+                match = filter(lambda var: var["address"] == value, vars)
+                
+                if len(match) < 1:
+                    state.write(dest, value)
+                else:
+                    state.write(dest, match[0])
 
         elif state.read(value) != None:
             content = state.read(value)
+            state.write(dest, content)
+
+        elif state.args_get(value) != None:
+            content = state.args_get(value)
             state.write(dest, content)
 
         elif '0x' in value:
             value = int(value, 16)
             state.write(dest, value)
 
+        else:
+            state.write(dest, value)
+
+    def sub(func, inst):
+        global states
+
+        state = states[len(states) - 1]
+
+        dest = inst["args"]["dest"]
+        value = inst["args"]["value"]
+
+        if dest == "rsp":
+            rsp = state.read(dest)
+            state.write(dest, rsp - int(value, 16))
+
     op_handlers = {
         "call": call,
         "lea": lea,
-        "mov": mov
+        "mov": mov,
+        "sub": sub
     }
 
     if op in op_handlers.keys():
@@ -490,7 +558,8 @@ def printInst(inst):
     print s
 
 def printArgs():
-    global state
+    global states
+    state = states[len(states) - 1]
 
     if len(state.args["saved"]) == 0:
         return
