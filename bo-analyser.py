@@ -42,9 +42,6 @@ class State:
     def args_reset(self):
         self.args["saved"] = []
 
-    def get_args(self):
-        print "\nargs: " + str(self.args["saved"])
-
     def read(self, reg):
         return None if reg not in self.registers.keys() else self.registers[reg]
 
@@ -95,7 +92,7 @@ def analyse_frame(func):
     global state
     global program
 
-    state.get_args()
+    printArgs()
 
     print "begin <%s>" % (func)
 
@@ -331,7 +328,7 @@ def handleOp(op, func, inst):
 
         elif '@' in newFunc:
             newFunc = newFunc.split('@')[0]
-            state.get_args()
+            printArgs()
             handleDng(newFunc)
 
         state.args_reset()
@@ -419,6 +416,10 @@ def printInst(inst):
             s += inst["args"]["obs"] + ' '
 
     print s
+
+def printArgs():
+    global state
+    print "\nargs: " + str(state.args["saved"])
 
 def __main__():
     run()
