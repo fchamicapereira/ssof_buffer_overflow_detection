@@ -316,7 +316,7 @@ def handleDng(dngFunc, func, inst):
 
         # overflow
         excess = dest["bytes"] - size
-        print 'overflow of %d bytes' % excess
+        print '!!! overflow of %d bytes with fgets' % excess
 
         # TODO
 
@@ -373,7 +373,7 @@ def handleDng(dngFunc, func, inst):
         "snprintf": snprintf,
         "read": read
     }
-´   
+
     if dngFunc in dng.keys():
         dng[dngFunc](func, inst)
 
