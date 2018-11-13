@@ -237,7 +237,7 @@ def invalidAccs(vuln_func, addr, fnname, var, overflown_addr):
 
     vulnerabilities.append(vuln)
 
-def sCorruption(vuln_func, addr, fnname, var, overflown_addr):
+def sCorruption(vuln_func, addr, fnname, var):
     global vulnerabilities
     global currentRetOvf
 
@@ -250,7 +250,7 @@ def sCorruption(vuln_func, addr, fnname, var, overflown_addr):
         "address": addr,
         "overflow_var": var,
         "vuln_function": vuln_func,
-        "overflown_address": overflown_addr
+        "overflown_address": "rbp+0x10"
     }
 
     vulnerabilities.append(vuln)
@@ -259,7 +259,7 @@ def sCorruption(vuln_func, addr, fnname, var, overflown_addr):
 #       DANGEROUS FUNC HANDLERS
 # ----------------------------------
 
-def handleDng(dngFunc, func, inst):
+def handleDng(dngFunc, vuln_func, inst):
     
     # with this function, everything can be overflown
     def gets(vuln_func, inst):
@@ -285,7 +285,8 @@ def handleDng(dngFunc, func, inst):
             mem_addr = "rbp" + hex(mem["start"])
             invalidAccs(vuln_func, addr, dngFunc, arg["name"], mem_addr)
         
-        # TODO finish
+        # invalid write access to memory out of the current frame
+        sCorruption(vuln_func, addr, dngFunc, arg["name"])
 
     def strcpy(vuln_func, inst):
         global program
@@ -375,7 +376,7 @@ def handleDng(dngFunc, func, inst):
     }
 
     if dngFunc in dng.keys():
-        dng[dngFunc](func, inst)
+        dng[dngFunc](vuln_func, inst)
 
 # ----------------------------------
 #          OPERATOR HANDLERS

@@ -47,7 +47,7 @@ for f in files:
     solution = json.loads(f_solution.read())
 
     if equal(result, solution):
-        print '+ [PASSED] ' + filename_in
+        print '\033[92m (%d/%d) %s \033[0m' % (len(result), len(solution), filename_in)
         subprocess.call(['rm', './' + filename_result])
     else:
-        print '  [FAILED] ' + filename_in
+        print '\033[91m (%d/%d) %s \033[0m' % (len(result), len(solution), filename_in)
