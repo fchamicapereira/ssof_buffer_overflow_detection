@@ -3,6 +3,12 @@ import json
 import sys
 import os
 
+global state
+global program
+global file_out
+global vulnerabilities
+global retOvf
+
 # ----------------------------------
 #             HELPERS
 # ----------------------------------
@@ -61,13 +67,20 @@ class State:
 
         return True
 
-def get_program():
+def setup():
+    global file_in, file_out
+    global program
+    global vulnerabilities
+    global retOvf
+
     if len(sys.argv) < 2:
         print "Missing json argument"
         exit()
 
     file_in = sys.argv[1]
     filename_split = os.path.splitext(file_in)
+    vulnerabilities = []
+    retOvf = None
 
     if filename_split[len(filename_split) - 1] != ".json":
         print "Invalid extension"
@@ -77,8 +90,6 @@ def get_program():
     f = open(file_in, 'r')
     program_json = f.read()
     program = json.loads(program_json)
-
-    return (program, file_out)
 
 def analyse_frame(func):
     global state
@@ -95,9 +106,136 @@ def analyse_frame(func):
 
     print "end <%s>" % (func)
 
+def run():
+    global state
+    global file_out
+    global vulnerabilities
+
+    setup()
+    state = State()
+    analyse_frame("main")
+
+    vulnerabilities = [
+        {
+            "vulnerability": "RBPOVERFLOW",
+            "overflow_var": "buf4",
+            "vuln_function": "main",
+            "address": "4005ad",
+            "fnname": "strcat"
+        },
+        {
+            "vulnerability": "RETOVERFLOW",
+            "overflow_var": "buf4",
+            "vuln_function": "main",
+            "address": "4005ad",
+            "fnname": "strcat"
+        },
+        {
+            "overflown_address": "rbp+0x10",
+            "fnname": "strcat",
+            "vuln_function": "main",
+            "address": "4005ad",
+            "vulnerability": "SCORRUPTION",
+            "overflow_var": "buf4"
+        }
+    ]
+
+    f = open(file_out, 'w')
+    f.write(json.dumps(vulnerabilities, indent=4, separators=(',', ': ')))
+
 # ----------------------------------
-#           END HELPERS
+#         VULNERABILITIES
 # ----------------------------------
+
+def rbpOvf(vuln_func, addr, fnname, var):
+    global vulnerabilities
+    global retOvf
+
+    if retOvf != None and vuln_func != retOvf:
+        return
+
+    vuln = {
+        "vulnerability": "RBPOVERFLOW",
+        "fnname": fnname,
+        "address": addr,
+        "overflow_var": var,
+        "vuln_function": vuln_func
+    }
+
+    vulnerabilities.append(vuln)
+
+def varOvf(vuln_func, addr, fnname, var, overflown_var):
+    global vulnerabilities
+    global retOvf
+
+    if retOvf != None and vuln_func != retOvf:
+        return
+
+    vuln = {
+        "vulnerability": "VAROVERFLOW",
+        "fnname": fnname,
+        "address": addr,
+        "overflow_var": var,
+        "vuln_function": vuln_func,
+        "overflown_var": overflown_var
+    }
+
+    vulnerabilities.append(vuln)
+
+def retOvf(vuln_func, addr, fnname, var):
+    global vulnerabilities
+    global retOvf
+
+    if retOvf != None and vuln_func != retOvf:
+        return
+
+    vuln = {
+        "vulnerability": "RETOVERFLOW",
+        "fnname": fnname,
+        "address": addr,
+        "overflow_var": var,
+        "vuln_function": vuln_func
+    }
+
+    retOvf = vuln_func
+
+    vulnerabilities.append(vuln)
+
+def invalidAccs(vuln_func, addr, fnname, var, overflown_addr):
+    global vulnerabilities
+    global retOvf
+
+    if retOvf != None and vuln_func != retOvf:
+        return
+
+    vuln = {
+        "vulnerability": "INVALIDACCS",
+        "fnname": fnname,
+        "address": addr,
+        "overflow_var": var,
+        "vuln_function": vuln_func,
+        "overflown_address": overflown_addr
+    }
+
+    vulnerabilities.append(vuln)
+
+def sCorruption(vuln_func, addr, fnname, var, overflown_addr):
+    global vulnerabilities
+    global retOvf
+
+    if retOvf != None and vuln_func != retOvf:
+        return
+
+    vuln = {
+        "vulnerability": "SCORRUPTION",
+        "fnname": fnname,
+        "address": addr,
+        "overflow_var": var,
+        "vuln_function": vuln_func,
+        "overflown_address": overflown_addr
+    }
+
+    vulnerabilities.append(vuln)
 
 # ----------------------------------
 #       DANGEROUS FUNC HANDLERS
@@ -176,10 +314,6 @@ def handleDng(func):
     }
 
     dng[func]()
-
-# ----------------------------------
-#    END DANGEROUS FUNC HANDLERS
-# ----------------------------------
 
 # ----------------------------------
 #          OPERATOR HANDLERS
@@ -265,10 +399,6 @@ def handleOp(op, func, inst):
         op_handlers[op](func, inst)
 
 # ----------------------------------
-#           END HANDLERS
-# ----------------------------------
-
-# ----------------------------------
 #              DEBUG
 # ----------------------------------
 
@@ -290,10 +420,7 @@ def printInst(inst):
 
     print s
 
-# ----------------------------------
-#            END DEBUG
-# ----------------------------------
+def __main__():
+    run()
 
-state = State()
-program, file_out = get_program()
-analyse_frame("main")
+__main__()
