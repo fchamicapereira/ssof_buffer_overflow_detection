@@ -7,7 +7,7 @@ global state
 global program
 global file_out
 global vulnerabilities
-global retOvf
+global currentRetOvf
 
 # ----------------------------------
 #             HELPERS
@@ -16,6 +16,7 @@ global retOvf
 class State:
     def __init__(self):
         self.registers = {}
+
         for reg in (
             'rax', 'rbx', 'rcx', 'rdx', 'rdi',
             'rsi', 'r8', 'r9', 'r10', 'r11',
@@ -29,6 +30,9 @@ class State:
             "saved": []
         }
 
+        self.vars = []
+        self.non_assigned_mem = []
+
     def args_add(self, reg, value):
         data = { "reg": reg, "value": value }
 
@@ -41,6 +45,48 @@ class State:
 
     def args_reset(self):
         self.args["saved"] = []
+        self.non_assigned_mem = []
+
+    def update_non_assigned_memory(self):
+        non_assigned_mem = []
+        saved_pos = None
+        saved_size = None
+        
+        if len(self.vars) == 0:
+            return
+
+        for var in self.vars:
+            size = var["bytes"]
+            pos = var["rbp_rel_pos"]
+
+            if saved_pos != None and saved_size != None and pos > saved_pos + saved_size:
+                non_assigned_mem.append({
+                    "start": saved_pos + saved_size,
+                    "end": pos - 1
+                })
+
+            saved_pos = pos
+            saved_size = size
+        
+        if saved_pos + saved_size < 0:
+            non_assigned_mem.append({
+                "start": saved_pos + saved_size,
+                "end": -1
+            })
+
+        self.non_assigned_mem = non_assigned_mem
+
+    def update_vars(self, vars):
+        result = []
+        for v in vars:
+            v["rbp_rel_pos"] = int(v["address"][3:], 16) # pos relative to rbp
+            result.append(v)
+        
+        # sort by position in stack
+        result = sorted(result, key = lambda v: v['rbp_rel_pos']) 
+        self.vars = result
+        self.update_non_assigned_memory()
+
 
     def read(self, reg):
         return None if reg not in self.registers.keys() else self.registers[reg]
@@ -68,7 +114,7 @@ def setup():
     global file_in, file_out
     global program
     global vulnerabilities
-    global retOvf
+    global currentRetOvf
 
     if len(sys.argv) < 2:
         print "Missing json argument"
@@ -77,7 +123,7 @@ def setup():
     file_in = sys.argv[1]
     filename_split = os.path.splitext(file_in)
     vulnerabilities = []
-    retOvf = None
+    currentRetOvf = None
 
     if filename_split[len(filename_split) - 1] != ".json":
         print "Invalid extension"
@@ -93,7 +139,7 @@ def analyse_frame(func):
     global program
 
     printArgs()
-
+    state.update_vars(program[func]["variables"])
     print "begin <%s>" % (func)
 
     for inst in program[func]["instructions"]:
@@ -121,9 +167,9 @@ def run():
 
 def rbpOvf(vuln_func, addr, fnname, var):
     global vulnerabilities
-    global retOvf
+    global currentRetOvf
 
-    if retOvf != None and vuln_func != retOvf:
+    if currentRetOvf != None and vuln_func != currentRetOvf:
         return
 
     vuln = {
@@ -138,9 +184,9 @@ def rbpOvf(vuln_func, addr, fnname, var):
 
 def varOvf(vuln_func, addr, fnname, var, overflown_var):
     global vulnerabilities
-    global retOvf
+    global currentRetOvf
 
-    if retOvf != None and vuln_func != retOvf:
+    if currentRetOvf != None and vuln_func != currentRetOvf:
         return
 
     vuln = {
@@ -156,9 +202,9 @@ def varOvf(vuln_func, addr, fnname, var, overflown_var):
 
 def retOvf(vuln_func, addr, fnname, var):
     global vulnerabilities
-    global retOvf
+    global currentRetOvf
 
-    if retOvf != None and vuln_func != retOvf:
+    if currentRetOvf != None and vuln_func != currentRetOvf:
         return
 
     vuln = {
@@ -169,15 +215,15 @@ def retOvf(vuln_func, addr, fnname, var):
         "vuln_function": vuln_func
     }
 
-    retOvf = vuln_func
+    currentRetOvf = vuln_func
 
     vulnerabilities.append(vuln)
 
 def invalidAccs(vuln_func, addr, fnname, var, overflown_addr):
     global vulnerabilities
-    global retOvf
+    global currentRetOvf
 
-    if retOvf != None and vuln_func != retOvf:
+    if currentRetOvf != None and vuln_func != currentRetOvf:
         return
 
     vuln = {
@@ -193,9 +239,9 @@ def invalidAccs(vuln_func, addr, fnname, var, overflown_addr):
 
 def sCorruption(vuln_func, addr, fnname, var, overflown_addr):
     global vulnerabilities
-    global retOvf
+    global currentRetOvf
 
-    if retOvf != None and vuln_func != retOvf:
+    if currentRetOvf != None and vuln_func != currentRetOvf:
         return
 
     vuln = {
@@ -213,60 +259,80 @@ def sCorruption(vuln_func, addr, fnname, var, overflown_addr):
 #       DANGEROUS FUNC HANDLERS
 # ----------------------------------
 
-def handleDng(func):
-    def gets():
+def handleDng(dngFunc, func, inst):
+    
+    # with this function, everything can be overflown
+    def gets(vuln_func, inst):
+        global program
+        global state
+
+        addr = inst["address"]
+        arg = state.args["saved"][0]["value"]
+        vars = list(filter(lambda v: v["address"] != arg["address"], state.vars))
+        
+        retOvf(vuln_func, addr, dngFunc, arg["name"])
+
+        # check var overflow
+        for v in vars:
+            if "rbp_rel_pos" in v.keys() and arg["rbp_rel_pos"] < v["rbp_rel_pos"]:
+                varOvf(vuln_func, addr, dngFunc, arg["name"], v["name"])
+
+        rbpOvf(vuln_func, addr, dngFunc, arg["name"])
+
+        for mem in state.non_assigned_mem:
+            mem_addr = "rbp" + hex(mem["start"])
+            invalidAccs(vuln_func, addr, dngFunc, arg["name"], mem_addr)
+        
+        # TODO finish
+
+    def strcpy(vuln_func, inst):
         global program
         global state
         # TODO
 
-    def strcpy():
+    def strcat(vuln_func, inst):
         global program
         global state
         # TODO
 
-    def strcat():
+    def fgets(vuln_func, inst):
         global program
         global state
         # TODO
 
-    def fgets():
+    def strncpy(vuln_func, inst):
         global program
         global state
         # TODO
 
-    def strncpy():
-        global program
-        global state
-        # TODO
-
-    def strncat():
+    def strncat(vuln_func, inst):
         global program
         global state
         # TODO
 
     # --------- ADVANCED ---------
 
-    def sprintf():
+    def sprintf(vuln_func, inst):
         global program
         global state
         # TODO
 
-    def scanf():
+    def scanf(vuln_func, inst):
         global program
         global state
         # TODO
 
-    def fscanf():
+    def fscanf(vuln_func, inst):
         global program
         global state
         # TODO
 
-    def snprintf():
+    def snprintf(vuln_func, inst):
         global program
         global state
         # TODO
 
-    def read():
+    def read(vuln_func, inst):
         global program
         global state
         # TODO
@@ -285,7 +351,7 @@ def handleDng(func):
         "read": read
     }
 
-    dng[func]()
+    dng[dngFunc](func, inst)
 
 # ----------------------------------
 #          OPERATOR HANDLERS
@@ -300,25 +366,24 @@ def handleOp(op, func, inst):
 
         if newFunc in program.keys():
             analyse_frame(newFunc)
+            state.update_vars(program[func]["variables"])
 
         elif '@' in newFunc:
             newFunc = newFunc.split('@')[0]
             printArgs()
-            handleDng(newFunc)
+            handleDng(newFunc, func, inst)
 
         state.args_reset()
 
     def lea(func, inst):
         global program
 
-        vars = program[func]["variables"]
-
         value = inst["args"]["value"]
         dest = inst["args"]["dest"]
 
         if value[0] == '[':
             value = value[1:-1]
-            match = filter(lambda var: var["address"] == value, vars)
+            match = filter(lambda var: var["address"] == value, state.vars)
             
             if len(match) < 1:
                 print "Not found. Searching in the registers (%s)" % json.dump(inst)
