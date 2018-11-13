@@ -394,7 +394,14 @@ def printInst(inst):
 
 def printArgs():
     global state
-    print "\nargs: " + str(state.args["saved"])
+
+    if len(state.args["saved"]) == 0:
+        return
+        
+    s = '\nArguments:\n'
+    for arg in state.args["saved"]:
+        s += '  {} \n'.format(json.dumps(arg["value"]))
+    print s
 
 def __main__():
     run()
