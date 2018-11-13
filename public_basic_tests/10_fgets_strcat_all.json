@@ -65,7 +65,7 @@
                 "op": "mov",
                 "pos": 5,
                 "args": {
-                    "dest": "esi",
+                    "dest": "rsi",
                     "value": "0x40"
                 },
                 "address": "40057a"
@@ -111,7 +111,7 @@
                 "op": "mov",
                 "pos": 10,
                 "args": {
-                    "dest": "esi",
+                    "dest": "rsi",
                     "value": "0x20"
                 },
                 "address": "400592"

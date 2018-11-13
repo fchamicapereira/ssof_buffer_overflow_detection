@@ -43,10 +43,6 @@ class State:
 
         self.args["saved"].insert(0, data)
 
-    def args_reset(self):
-        self.args["saved"] = []
-        self.non_assigned_mem = []
-
     def update_non_assigned_memory(self):
         non_assigned_mem = []
         saved_pos = None
@@ -76,7 +72,7 @@ class State:
 
         self.non_assigned_mem = non_assigned_mem
 
-    def update_vars(self, vars):
+    def enter_frame(self, vars):
         result = []
         for v in vars:
             v["rbp_rel_pos"] = int(v["address"][3:], 16) # pos relative to rbp
@@ -84,9 +80,13 @@ class State:
         
         # sort by position in stack
         result = sorted(result, key = lambda v: v['rbp_rel_pos']) 
+
         self.vars = result
         self.update_non_assigned_memory()
 
+    def exit_frame(self, vars):
+        self.args["saved"] = []
+        self.non_assigned_mem = []
 
     def read(self, reg):
         return None if reg not in self.registers.keys() else self.registers[reg]
@@ -139,7 +139,7 @@ def analyse_frame(func):
     global program
 
     printArgs()
-    state.update_vars(program[func]["variables"])
+    state.enter_frame(program[func]["variables"])
     print "begin <%s>" % (func)
 
     for inst in program[func]["instructions"]:
@@ -300,11 +300,32 @@ def handleDng(dngFunc, func, inst):
     def fgets(vuln_func, inst):
         global program
         global state
+
+        # char * fgets(char * restrict str, int size, FILE * restrict stream);
+        # reads $size - 1 bytes but writes $size (last byte is \0)
+
+        dest = state.args["saved"][0]["value"]
+        size = state.args["saved"][1]["value"]
+
+        dest["size"] = size
+
+        print size, dest["bytes"]
+        # no overflow
+        if size <= dest["bytes"]:
+            return
+
+        # overflow
+        excess = dest["bytes"] - size
+        print 'overflow of %d bytes' % excess
+
         # TODO
 
     def strncpy(vuln_func, inst):
         global program
         global state
+
+
+
         # TODO
 
     def strncat(vuln_func, inst):
@@ -352,8 +373,9 @@ def handleDng(dngFunc, func, inst):
         "snprintf": snprintf,
         "read": read
     }
-
-    dng[dngFunc](func, inst)
+´   
+    if dngFunc in dng.keys():
+        dng[dngFunc](func, inst)
 
 # ----------------------------------
 #          OPERATOR HANDLERS
@@ -368,14 +390,12 @@ def handleOp(op, func, inst):
 
         if newFunc in program.keys():
             analyse_frame(newFunc)
-            state.update_vars(program[func]["variables"])
+            state.exit_frame(program[func]["variables"])
 
         elif '@' in newFunc:
             newFunc = newFunc.split('@')[0]
             printArgs()
             handleDng(newFunc, func, inst)
-
-        state.args_reset()
 
     def lea(func, inst):
         global program
@@ -429,11 +449,13 @@ def handleOp(op, func, inst):
             else:
                 state.write(dest, match[0])
 
-        else:
+        elif state.read(value) != None:
             content = state.read(value)
+            state.write(dest, content)
 
-            if content != None:
-                state.write(dest, content)
+        elif '0x' in value:
+            value = int(value, 16)
+            state.write(dest, value)
 
     op_handlers = {
         "call": call,
