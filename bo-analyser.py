@@ -337,6 +337,13 @@ def handleOp(op, func, inst):
 
     def mov(func, inst):
         global state
+
+        # TODO handle all the possible cases of mov arguments (are all needed?)
+        # register to register
+        # register to pointer
+        # pointer to register
+        # number to register
+        # umber to pointer
         
         vars = program[func]["variables"]
 
@@ -397,7 +404,7 @@ def printArgs():
 
     if len(state.args["saved"]) == 0:
         return
-        
+
     s = '\nArguments:\n'
     for arg in state.args["saved"]:
         s += '  {} \n'.format(json.dumps(arg["value"]))
