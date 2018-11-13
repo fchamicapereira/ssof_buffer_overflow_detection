@@ -92,7 +92,7 @@ class State:
         return None if reg not in self.registers.keys() else self.registers[reg]
 
     def write(self, reg, value):
-        print "+++ saved %s with %s" % (reg, json.dumps(value))
+        print "\n+++ [%s] <-- %s\n" % (reg, json.dumps(value))
 
         self.registers[reg] = value
 
@@ -272,13 +272,15 @@ def handleDng(dngFunc, func, inst):
         
         retOvf(vuln_func, addr, dngFunc, arg["name"])
 
-        # check var overflow
+        # variable overflow
         for v in vars:
             if "rbp_rel_pos" in v.keys() and arg["rbp_rel_pos"] < v["rbp_rel_pos"]:
                 varOvf(vuln_func, addr, dngFunc, arg["name"], v["name"])
 
+        # RBP overflow
         rbpOvf(vuln_func, addr, dngFunc, arg["name"])
 
+        # invalid write access to non-assigned memory
         for mem in state.non_assigned_mem:
             mem_addr = "rbp" + hex(mem["start"])
             invalidAccs(vuln_func, addr, dngFunc, arg["name"], mem_addr)
