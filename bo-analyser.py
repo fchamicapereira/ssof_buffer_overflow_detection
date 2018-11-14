@@ -336,7 +336,6 @@ def handleDng(dngFunc, vuln_func, inst):
             return
 
         # overflow
-        print dest, dest["bytes"], size
         excess = dest["bytes"] - size
         print '!!! overflow of %d bytes with fgets' % excess
 
