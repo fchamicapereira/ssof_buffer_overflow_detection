@@ -338,8 +338,12 @@ def handleDng(dngFunc, vuln_func, inst):
             rbpOvf(vuln_func, addr, dngFunc, dest["name"])
 
         # RET overflow
-        if srcSize + dest["rbp_rel_pos"] > 4:
+        if srcSize + dest["rbp_rel_pos"] > 8:
             retOvf(vuln_func, addr, dngFunc, dest["name"])
+
+        # invalid write access to memory out of the current frame
+        if srcSize + dest["rbp_rel_pos"] > 16:
+            sCorruption(vuln_func, addr, dngFunc, dest["name"])
 
 
 
