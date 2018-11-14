@@ -308,7 +308,32 @@ def handleDng(dngFunc, vuln_func, inst):
         global states
 
         state = states[len(states) - 1]
-        # TODO
+        addr = inst["address"]
+        dest = state.args["saved"][0]["value"]
+        src = state.args["saved"][1]["value"]
+
+        # no overflow
+        if src["size"] <= dest["bytes"]:
+            return
+
+        # TODO v["rbp_rel_pos"] might not exist?
+        vars = list(filter(lambda v: v["address"] != dest["address"] and v["rbp_rel_pos"] > dest["rbp_rel_pos"], state.vars))
+
+        # variable overflow
+        for v in vars:
+            if "rbp_rel_pos" in v.keys() and dest["rbp_rel_pos"] + src["size"] > v["rbp_rel_pos"]:
+                varOvf(vuln_func, addr, dngFunc, dest["name"], v["name"])
+
+        # invalid write access to non-assigned memory
+        for mem in state.non_assigned_mem:
+            mem_addr = "rbp" + hex(mem["start"])
+            if dest["rbp_rel_pos"] + src["size"] > mem["start"]:
+                invalidAccs(vuln_func, addr, dngFunc, dest["name"], mem_addr)
+
+        # RBP overflow
+        if src["size"] > dest["rbp_rel_pos"]:
+            rbpOvf(vuln_func, addr, dngFunc, dest["name"])
+
 
     def strcat(vuln_func, inst):
         global program
