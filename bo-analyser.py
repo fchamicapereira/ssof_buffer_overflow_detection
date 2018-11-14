@@ -312,8 +312,11 @@ def handleDng(dngFunc, vuln_func, inst):
         dest = state.args["saved"][0]["value"]
         src = state.args["saved"][1]["value"]
 
+        # in case there is a strcpy without an assignment to the source buffer
+        srcSize = src.get("size", 0)
+
         # no overflow
-        if src["size"] <= dest["bytes"]:
+        if srcSize <= dest["bytes"]:
             return
 
         # TODO v["rbp_rel_pos"] might not exist?
@@ -321,18 +324,24 @@ def handleDng(dngFunc, vuln_func, inst):
 
         # variable overflow
         for v in vars:
-            if "rbp_rel_pos" in v.keys() and dest["rbp_rel_pos"] + src["size"] > v["rbp_rel_pos"]:
+            if "rbp_rel_pos" in v.keys() and dest["rbp_rel_pos"] + srcSize > v["rbp_rel_pos"]:
                 varOvf(vuln_func, addr, dngFunc, dest["name"], v["name"])
 
         # invalid write access to non-assigned memory
         for mem in state.non_assigned_mem:
             mem_addr = "rbp" + hex(mem["start"])
-            if dest["rbp_rel_pos"] + src["size"] > mem["start"]:
+            if dest["rbp_rel_pos"] + srcSize > mem["start"]:
                 invalidAccs(vuln_func, addr, dngFunc, dest["name"], mem_addr)
 
         # RBP overflow
-        if src["size"] > dest["rbp_rel_pos"]:
+        if srcSize + dest["rbp_rel_pos"] > 0:
             rbpOvf(vuln_func, addr, dngFunc, dest["name"])
+
+        # RET overflow
+        if srcSize + dest["rbp_rel_pos"] > 4:
+            retOvf(vuln_func, addr, dngFunc, dest["name"])
+
+
 
 
     def strcat(vuln_func, inst):
