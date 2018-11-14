@@ -29,25 +29,44 @@ def equal(vulns_1, vulns_2):
 
     return True
 
+tests = []
+
 tests_path = './public_basic_tests'
-files = [f.split('.')[0] for f in os.listdir(tests_path) if isfile(join(tests_path, f)) and '.output.json' in f]
-files.sort()
+tests_advanced_path = './public_advanced_tests'
 
-for f in files:
-    filename_in = f + '.json'
-    filename_result = f + '.output.json'
+basic_files = [f.split('.')[0] for f in os.listdir(tests_path) if isfile(join(tests_path, f)) and '.output.json' in f]
+basic_files.sort()
 
-    with open(os.devnull, 'wb') as devnull:
-        subprocess.check_call(['python', './bo-analyser.py', '{0}/{1}'.format(tests_path, filename_in)], stdout=devnull, stderr=subprocess.STDOUT)
+tests.append({ "path": tests_path, "files": basic_files})
 
-    f_result = open(filename_result, 'r')
-    result = json.loads(f_result.read())
+advanced_files = [f.split('.')[0] for f in os.listdir(tests_advanced_path) if isfile(join(tests_advanced_path, f)) and '.output.json' in f]
+advanced_files.sort()
 
-    f_solution = open('{0}/{1}'.format(tests_path, filename_result), 'r')
-    solution = json.loads(f_solution.read())
+tests.append({ "path": tests_advanced_path, "files": advanced_files})
 
-    if equal(result, solution):
-        print '\033[92m (%d/%d) %s \033[0m' % (len(result), len(solution), filename_in)
-        subprocess.call(['rm', './' + filename_result])
-    else:
-        print '\033[91m (%d/%d) %s \033[0m' % (len(result), len(solution), filename_in)
+for t in tests:
+    files = t["files"]
+    path = t["path"]
+
+    for f in files:
+        filename_in = f + '.json'
+        filename_result = f + '.output.json'
+
+        with open(os.devnull, 'wb') as devnull:
+            try:
+                subprocess.check_call(['python', './bo-analyser.py', '{0}/{1}'.format(path, filename_in)], stdout=devnull, stderr=subprocess.STDOUT)
+            except subprocess.CalledProcessError:
+                print '-- Exited with error: ' + filename_in
+                continue
+
+        f_result = open(filename_result, 'r')
+        result = json.loads(f_result.read())
+
+        f_solution = open('{0}/{1}'.format(path, filename_result), 'r')
+        solution = json.loads(f_solution.read())
+
+        if equal(result, solution):
+            print '\033[92m (%d/%d) %s \033[0m' % (len(result), len(solution), filename_in)
+            subprocess.call(['rm', './' + filename_result])
+        else:
+            print '\033[91m (%d/%d) %s \033[0m' % (len(result), len(solution), filename_in)
