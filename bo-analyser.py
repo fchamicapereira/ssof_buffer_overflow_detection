@@ -307,6 +307,36 @@ def sCorruption(vuln_func, addr, fnname, var):
 # ----------------------------------
 
 def handleDng(dngFunc, vuln_func, inst):
+
+    def overflowReach(state, vuln_func, inst, addr, var):
+        reach = var["size"] + var["rbp_rel_pos"]
+
+        vars = list(filter(lambda v: "rbp_rel_pos" in v.keys() and v["rbp_rel_pos"] > var["rbp_rel_pos"], state.vars))
+
+        # variable overflow
+        for v in vars:
+            if reach >= v["rbp_rel_pos"]:
+                varOvf(vuln_func, addr, dngFunc, var["name"], v["name"])
+
+        # invalid write access to non-assigned memory
+        for mem in state.non_assigned_mem:
+            mem_addr = "rbp" + hex(mem["start"])
+            print mem_addr, mem["start"], reach
+
+            if reach > mem["start"]:
+                invalidAccs(vuln_func, addr, dngFunc, var["name"], mem_addr)
+        
+        # RBP overflow
+        if reach >= 0:
+            rbpOvf(vuln_func, addr, dngFunc, var["name"])
+
+        # RET overflow
+        if reach >= 8:
+            retOvf(vuln_func, addr, dngFunc, var["name"])
+
+        # invalid write access to memory out of the current frame
+        if reach >= 16:
+            sCorruption(vuln_func, addr, dngFunc, var["name"])
     
     # with this function, everything can be overflown
     def gets(vuln_func, inst):
@@ -315,25 +345,11 @@ def handleDng(dngFunc, vuln_func, inst):
 
         state = states[len(states) - 1]
         addr = inst["address"]
+
         arg = state.args["saved"][0]["value"]
-        vars = list(filter(lambda v: "rbp_rel_pos" in v.keys() and v["rbp_rel_pos"] > arg["rbp_rel_pos"], state.vars))
-        
-        retOvf(vuln_func, addr, dngFunc, arg["name"])
+        arg["size"] = -1 * arg["rbp_rel_pos"] + 100 # just to make it overflow everything
 
-        # variable overflow
-        for v in vars:
-            varOvf(vuln_func, addr, dngFunc, arg["name"], v["name"])
-
-        # RBP overflow
-        rbpOvf(vuln_func, addr, dngFunc, arg["name"])
-
-        # invalid write access to non-assigned memory
-        for mem in state.non_assigned_mem:
-            mem_addr = "rbp" + hex(mem["start"])
-            invalidAccs(vuln_func, addr, dngFunc, arg["name"], mem_addr)
-        
-        # invalid write access to memory out of the current frame
-        sCorruption(vuln_func, addr, dngFunc, arg["name"])
+        overflowReach(state, vuln_func, inst, addr, arg)
 
     def strcpy(vuln_func, inst):
         global program
@@ -341,42 +357,18 @@ def handleDng(dngFunc, vuln_func, inst):
 
         state = states[len(states) - 1]
         addr = inst["address"]
+
         dest = state.args["saved"][0]["value"]
         src = state.args["saved"][1]["value"]
 
         # in case there is a strcpy without an assignment to the source buffer
-        srcSize = src.get("size", 0)
+        dest["size"] = src.get("size", 0)
 
         # no overflow
-        if srcSize <= dest["bytes"]:
+        if dest["size"] <= dest["bytes"]:
             return
 
-        # TODO v["rbp_rel_pos"] might not exist?
-        vars = list(filter(lambda v: v["address"] != dest["address"] and v["rbp_rel_pos"] > dest["rbp_rel_pos"], state.vars))
-
-        # variable overflow
-        for v in vars:
-            if "rbp_rel_pos" in v.keys() and dest["rbp_rel_pos"] + srcSize > v["rbp_rel_pos"]:
-                varOvf(vuln_func, addr, dngFunc, dest["name"], v["name"])
-
-        # invalid write access to non-assigned memory
-        for mem in state.non_assigned_mem:
-            mem_addr = "rbp" + hex(mem["start"])
-            if dest["rbp_rel_pos"] + srcSize > mem["start"]:
-                invalidAccs(vuln_func, addr, dngFunc, dest["name"], mem_addr)
-
-        # RBP overflow
-        if srcSize + dest["rbp_rel_pos"] > 0:
-            rbpOvf(vuln_func, addr, dngFunc, dest["name"])
-
-        # RET overflow
-        if srcSize + dest["rbp_rel_pos"] > 8:
-            retOvf(vuln_func, addr, dngFunc, dest["name"])
-
-        # invalid write access to memory out of the current frame
-        if srcSize + dest["rbp_rel_pos"] > 16:
-            sCorruption(vuln_func, addr, dngFunc, dest["name"])
-
+        overflowReach(state, vuln_func, inst, addr, dest)
 
     def strcat(vuln_func, inst):
         global program
@@ -404,34 +396,14 @@ def handleDng(dngFunc, vuln_func, inst):
         reach = dest["rbp_rel_pos"] + dest["size"]
 
         # overflow
-        vars = list(filter(lambda v: "rbp_rel_pos" in v.keys() and v["rbp_rel_pos"] > dest["rbp_rel_pos"], state.vars))
-
-        # variable overflow
-        for v in vars:
-            if reach >= v["rbp_rel_pos"]:
-                varOvf(vuln_func, addr, dngFunc, dest["name"], v["name"])
-
-        # RBP overflow
-        if reach >= 0:
-            rbpOvf(vuln_func, addr, dngFunc, dest["name"])
-
-        # invalid write access to non-assigned memory
-        for mem in state.non_assigned_mem:
-            mem_addr = "rbp" + hex(mem["start"])
-
-            if reach > mem["start"]:
-                invalidAccs(vuln_func, addr, dngFunc, dest["name"], mem_addr)
-        
-        # invalid write access to memory out of the current frame
-        
-        if reach > 0x10:
-            sCorruption(vuln_func, addr, dngFunc, arg["name"])
+        overflowReach(state, vuln_func, inst, addr, dest)
 
     def fgets(vuln_func, inst):
         global program
         global states
 
         state = states[len(states) - 1]
+        addr = inst["address"]
 
         # char * fgets(char * restrict str, int size, FILE * restrict stream);
         # reads $size - 1 bytes but writes $size (last byte is \0)
@@ -446,10 +418,7 @@ def handleDng(dngFunc, vuln_func, inst):
             return
 
         # overflow
-        excess = dest["bytes"] - size
-        print '!!! overflow of %d bytes with fgets' % excess
-
-        # TODO
+        overflowReach(state, vuln_func, inst, addr, dest)
 
     def strncpy(vuln_func, inst):
         global program
