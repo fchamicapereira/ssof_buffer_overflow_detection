@@ -7,7 +7,7 @@
         "fnname": "strcpy"
     },
     {
-        "vulnerability": "RETOVERFLOW",
+        "vulnerability": "REPOVERFLOW",
         "overflow_var": "buf2",
         "vuln_function": "fun1",
         "address": "400581",
