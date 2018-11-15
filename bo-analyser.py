@@ -409,7 +409,6 @@ def handleDng(dngFunc, vuln_func, inst):
         # everything is ok
         if dest["size"] <= dest["bytes"]:
             return
-            print 'no ovf'
 
         reach = dest["rbp_rel_pos"] + dest["size"]
 
