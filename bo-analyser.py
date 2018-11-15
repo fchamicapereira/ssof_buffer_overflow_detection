@@ -14,7 +14,7 @@ global currentRetOvf
 # ----------------------------------
 
 class State:
-    def __init__(self, vars, args=[]):
+    def __init__(self, vars, args=[], regs=None):
         self.registers = {}
         self.registers_names = (
             ['rax', 'eax', 'ax', 'al'],
@@ -36,17 +36,26 @@ class State:
             ['rip']
         )
 
-        for reg in self.registers_names:
-            self.registers[reg[0]] = None
+        if regs == None:
+            for reg in self.registers_names:
+                self.registers[reg[0]] = None
+            self.registers["rsp"] = 0
+        else:
+            self.registers = regs
 
-        self.registers["rsp"] = 0
         self.args = {
             "regs": ("rdi","rsi","rdx","rcx","r8","r9"),
             "saved": [],
             "current": args
         }
 
+        # saved pointers
+        self.pointers = {}
+
+        # local variables
         self.vars = []
+
+        # non assigned memory
         self.non_assigned_mem = []
 
         result = []
@@ -92,6 +101,16 @@ class State:
             if "address" in arg["value"].keys() and arg["value"]["address"] == reg:
                 return arg["value"]
 
+        return None
+
+    def savePointer(self, addr, value):
+        self.pointers[addr] = value
+        print "\n+++ [%s] <-- %s\n" % (addr, json.dumps(value))
+
+    def getPointer(self, addr):
+        for saved_pointer_addr in self.pointers.keys():
+            if saved_pointer_addr == addr:
+                return self.pointers[saved_pointer_addr]
         return None
 
     def calc_non_assigned_memory(self):
@@ -180,9 +199,12 @@ def analyse_frame(func):
 
     vars = program[func]["variables"]
 
-    if len(states) > 0 and states[len(states) - 1].args["saved"]:
-        args = states[len(states) - 1].args["saved"]
-        states.append(State(vars, args))
+    if len(states) > 0:
+        state = states[len(states) - 1]
+        args = state.args["saved"]
+        regs = state.registers
+
+        states.append(State(vars, args, regs))
     else:
         states.append(State(vars))
 
@@ -551,9 +573,11 @@ def handleOp(op, func, inst):
         # TODO handle all the possible cases of mov arguments (are all needed?)
         # register to register
         # register to pointer
+
         # pointer to register
         # number to register
-        # umber to pointer
+        
+        # number to pointer
         
         vars = program[func]["variables"]
 
@@ -561,37 +585,59 @@ def handleOp(op, func, inst):
         value = inst["args"]["value"]
 
         dest_reg = state.getRegKeyFromRegisters(dest)
-        if dest_reg == None:
-            return
-        
-        if "WORD" in value:
-            value = value.split(' ')[2][1:-1]
+        value_reg = state.getRegKeyFromRegisters(value)
 
-            if state.args_get(value) != None:
-                state.write(dest, state.args_get(value))
-            
-            else:
-                match = filter(lambda var: var["address"] == value, vars)
+        # to register
+        if dest_reg != None:
+
+            # from pointer   
+            if "PTR" in value:
+                value = value.split(' ')[2][1:-1]
                 
-                if len(match) < 1:
-                    state.write(dest, value)
-                else:
-                    state.write(dest, match[0])
+                if state.args_get(value) != None:
+                    state.write(dest, state.args_get(value))
+                    return
+                
+                match = filter(lambda var: var["address"] == value, vars)
 
-        elif state.read(value) != None:
-            content = state.read(value)
-            state.write(dest, content)
+                if len(match) > 0:
+                    print vars, match
+                    if len(match) < 1:
+                        state.write(dest, value)
+                    else:
+                        state.write(dest, match[0])
 
-        elif state.args_get(value) != None:
-            content = state.args_get(value)
-            state.write(dest, content)
+                    return
 
-        elif '0x' in value:
-            value = int(value, 16)
-            state.write(dest, value)
+                content = state.getPointer(value)
+                print 'content of', value, content
+                if content != None:
+                    state.write(dest, content)
+                    return
 
-        else:
-            state.write(dest, value)
+            if state.read(value) != None:
+                content = state.read(value)
+                state.write(dest, content)
+
+            elif state.args_get(value) != None:
+                content = state.args_get(value)
+                state.write(dest, content)
+
+            elif '0x' in value and 'rip' not in value:
+                value = int(value, 16)
+                state.write(dest, value)
+
+            else:
+                state.write(dest, value)
+
+        # from register
+        if value_reg != None:
+            content = state.read(value_reg)
+            
+            # to pointer
+            if 'PTR' in dest:
+                dest = dest.split(' ')[2][1:-1]
+                state.savePointer(dest, content)
 
     def sub(func, inst):
         global states
