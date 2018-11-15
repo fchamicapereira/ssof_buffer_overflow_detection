@@ -283,14 +283,13 @@ def handleDng(dngFunc, vuln_func, inst):
         state = states[len(states) - 1]
         addr = inst["address"]
         arg = state.args["saved"][0]["value"]
-        vars = list(filter(lambda v: v["address"] != arg["address"], state.vars))
+        vars = list(filter(lambda v: "rbp_rel_pos" in v.keys() and v["rbp_rel_pos"] > arg["rbp_rel_pos"], state.vars))
         
         retOvf(vuln_func, addr, dngFunc, arg["name"])
 
         # variable overflow
         for v in vars:
-            if "rbp_rel_pos" in v.keys() and arg["rbp_rel_pos"] < v["rbp_rel_pos"]:
-                varOvf(vuln_func, addr, dngFunc, arg["name"], v["name"])
+            varOvf(vuln_func, addr, dngFunc, arg["name"], v["name"])
 
         # RBP overflow
         rbpOvf(vuln_func, addr, dngFunc, arg["name"])
@@ -346,14 +345,54 @@ def handleDng(dngFunc, vuln_func, inst):
             sCorruption(vuln_func, addr, dngFunc, dest["name"])
 
 
-
-
     def strcat(vuln_func, inst):
         global program
         global states
 
         state = states[len(states) - 1]
-        # TODO
+
+        addr = inst["address"]
+
+        # char * strcat(char *restrict s1, const char *restrict s2);
+        # append s2 to s1
+        # copies N-1 bytes from s2 and appends to N-1 bytes from s1
+        # total size is 2N-2 + \0 (2N-1)
+        
+        dest = state.args["saved"][0]["value"]
+        src = state.args["saved"][1]["value"]
+
+        dest["size"] = dest["size"] + src["size"] - 1
+
+        # everything is ok
+        if dest["size"] <= dest["bytes"]:
+            return
+            print 'no ovf'
+
+        reach = dest["rbp_rel_pos"] + dest["size"]
+
+        # overflow
+        vars = list(filter(lambda v: "rbp_rel_pos" in v.keys() and v["rbp_rel_pos"] > dest["rbp_rel_pos"], state.vars))
+
+        # variable overflow
+        for v in vars:
+            if reach >= v["rbp_rel_pos"]:
+                varOvf(vuln_func, addr, dngFunc, dest["name"], v["name"])
+
+        # RBP overflow
+        if reach >= 0:
+            rbpOvf(vuln_func, addr, dngFunc, dest["name"])
+
+        # invalid write access to non-assigned memory
+        for mem in state.non_assigned_mem:
+            mem_addr = "rbp" + hex(mem["start"])
+
+            if reach > mem["start"]:
+                invalidAccs(vuln_func, addr, dngFunc, dest["name"], mem_addr)
+        
+        # invalid write access to memory out of the current frame
+        
+        if reach > 0x10:
+            sCorruption(vuln_func, addr, dngFunc, arg["name"])
 
     def fgets(vuln_func, inst):
         global program
@@ -394,6 +433,7 @@ def handleDng(dngFunc, vuln_func, inst):
         global states
 
         state = states[len(states) - 1]
+
         # TODO
 
     # --------- ADVANCED ---------
