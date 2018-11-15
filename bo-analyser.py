@@ -327,7 +327,7 @@ def sCorruption(vuln_func, addr, fnname, var):
 def handleDng(dngFunc, vuln_func, inst):
 
     def overflowReach(state, vuln_func, inst, addr, var):
-        reach = var["size"] + var["rbp_rel_pos"]
+        reach = var["realSize"] + var["rbp_rel_pos"]
 
         vars = list(filter(lambda v: "rbp_rel_pos" in v.keys() and v["rbp_rel_pos"] > var["rbp_rel_pos"], state.vars))
 
@@ -365,7 +365,7 @@ def handleDng(dngFunc, vuln_func, inst):
         addr = inst["address"]
 
         arg = state.args["saved"][0]["value"]
-        arg["size"] = -1 * arg["rbp_rel_pos"] + 100 # just to make it overflow everything
+        arg["realSize"] = -1 * arg["rbp_rel_pos"] + 100 # just to make it overflow everything
 
         overflowReach(state, vuln_func, inst, addr, arg)
 
@@ -380,10 +380,10 @@ def handleDng(dngFunc, vuln_func, inst):
         src = state.args["saved"][1]["value"]
 
         # in case there is a strcpy without an assignment to the source buffer
-        dest["size"] = src.get("size", 0)
+        dest["realSize"] = src.get("realSize", 0)
 
         # no overflow
-        if dest["size"] <= dest["bytes"]:
+        if dest["realSize"] <= dest["bytes"]:
             return
 
         overflowReach(state, vuln_func, inst, addr, dest)
@@ -404,13 +404,11 @@ def handleDng(dngFunc, vuln_func, inst):
         dest = state.args["saved"][0]["value"]
         src = state.args["saved"][1]["value"]
 
-        dest["size"] = dest["size"] + src["size"] - 1
+        dest["realSize"] = dest["realSize"] + src["realSize"] - 1
 
         # everything is ok
-        if dest["size"] <= dest["bytes"]:
+        if dest["realSize"] <= dest["bytes"]:
             return
-
-        reach = dest["rbp_rel_pos"] + dest["size"]
 
         # overflow
         overflowReach(state, vuln_func, inst, addr, dest)
@@ -428,7 +426,7 @@ def handleDng(dngFunc, vuln_func, inst):
         dest = state.args["saved"][0]["value"]
         size = state.args["saved"][1]["value"]
 
-        dest["size"] = size
+        dest["realSize"] = size
 
         # no overflow
         if size <= dest["bytes"]:
@@ -442,18 +440,43 @@ def handleDng(dngFunc, vuln_func, inst):
         global states
 
         state = states[len(states) - 1]
+        addr = inst["address"]
+        
+        # char *strncpy(char *dest, const char *src, size_t n)
+        
+        dest = state.args["saved"][0]["value"]
+        size = state.args["saved"][2]["value"]
 
+        dest["realSize"] = size
 
+        # no overflow
+        if size <= dest["bytes"]:
+            return
+        
+        # overflow
+        overflowReach(state, vuln_func, inst, addr, dest)
 
-        # TODO
 
     def strncat(vuln_func, inst):
         global program
         global states
 
         state = states[len(states) - 1]
+        addr = inst["address"]
 
-        # TODO
+        # char *strncat(char *dest, const char *src, size_t n);
+        
+        dest = state.args["saved"][0]["value"]
+        size = state.args["saved"][2]["value"]
+
+        dest["realSize"] = dest["realSize"] + size - 1
+        
+        # no overflow
+        if size <= dest["bytes"]:
+            return
+        
+        # overflow
+        overflowReach(state, vuln_func, inst, addr, dest)
 
     # --------- ADVANCED ---------
 
@@ -464,12 +487,14 @@ def handleDng(dngFunc, vuln_func, inst):
         state = states[len(states) - 1]
         # TODO
 
+
     def scanf(vuln_func, inst):
         global program
         global states
 
         state = states[len(states) - 1]
         # TODO
+
 
     def fscanf(vuln_func, inst):
         global program
@@ -483,7 +508,21 @@ def handleDng(dngFunc, vuln_func, inst):
         global states
 
         state = states[len(states) - 1]
-        # TODO
+        addr = inst["address"]
+        
+        # int snprintf(char *str, size_t size, const char *format, ...);
+        
+        dest = state.args["saved"][0]["value"]
+        size = state.args["saved"][1]["value"]
+
+        dest["realSize"] = size
+
+        # no overflow
+        if size <= dest["bytes"]:
+            return
+        
+        # overflow
+        overflowReach(state, vuln_func, inst, addr, dest)
 
     def read(vuln_func, inst):
         global program
@@ -548,6 +587,8 @@ def handleOp(op, func, inst):
             if len(match) < 1:
                 print "Not found. Searching in the registers"
                 match = state.read(value)
+
+                #TODO cant find rdi, for example, create new register?
 
                 if match == None:
                     print "Not found on the registers. Exiting"
