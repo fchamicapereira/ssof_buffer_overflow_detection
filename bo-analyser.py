@@ -123,12 +123,6 @@ class State:
 
         rsp = self.read("rsp")
 
-        if len(self.vars) > 0 and rsp < self.vars[0]["rbp_rel_pos"]:
-            self.non_assigned_mem.append({
-                "start": rsp,
-                "end": self.vars[0]["rbp_rel_pos"]
-            })
-        
         for var in self.vars:
             size = var["bytes"]
             pos = var["rbp_rel_pos"]
@@ -141,6 +135,8 @@ class State:
 
             saved_pos = pos
             saved_size = size
+
+        print self.non_assigned_mem
         
         if saved_pos + saved_size < 0:
             self.non_assigned_mem.append({
