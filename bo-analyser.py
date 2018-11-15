@@ -551,7 +551,7 @@ def handleOp(op, func, inst):
                 match = state.read(value)
 
                 if match == None:
-                    print "Not found on the registers"
+                    print "Not found on the registers. Exiting"
                     exit()
 
                 var = match
