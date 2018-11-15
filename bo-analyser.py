@@ -16,14 +16,28 @@ global currentRetOvf
 class State:
     def __init__(self, vars, args=[]):
         self.registers = {}
+        self.registers_names = (
+            ['rax', 'eax', 'ax', 'al'],
+            ['rbx', 'ebx', 'bx', 'bl'],
+            ['rcx', 'ecx', 'cx', 'cl'],
+            ['rdx', 'edx', 'dx', 'dl'],
+            ['rdi', 'edi', 'di', 'dil'],
+            ['rsi', 'esi', 'si', 'sil'],
+            ['r8', 'r8d', 'r8w', 'r8b'],
+            ['r9', 'r9d', 'r9w', 'r9b'],
+            ['r10', 'r10d', 'r10w', 'r10b'],
+            ['r11', 'r11d', 'r11w', 'r11b'],
+            ['r12', 'r12d', 'r12w', 'r12b'],
+            ['r13', 'r13d', 'r13w', 'r13b'],
+            ['r14', 'r14d', 'r14w', 'r14b'],
+            ['r15', 'r15d', 'r15w', 'r15b'],
+            ['rbp', 'ebp', 'bp', 'bpl'],
+            ['rsp', 'esp', 'sp', 'spl'],
+            ['rip']
+        )
 
-        for reg in (
-            'rax', 'rbx', 'rcx', 'rdx', 'rdi',
-            'rsi', 'r8', 'r9', 'r10', 'r11',
-            'r12', 'r13', 'r14', 'r15',
-            'rbp', 'rsp', 'rip'
-        ):
-            self.registers[reg] = None
+        for reg in self.registers_names:
+            self.registers[reg[0]] = None
 
         self.registers["rsp"] = 0
         self.args = {
@@ -46,7 +60,15 @@ class State:
         self.vars = result
         self.calc_non_assigned_memory()
 
+    def getRegKeyFromRegisters(self, reg):
+        reg_key = ''
+        for register_name in self.registers_names:
+            if reg in register_name:
+                return register_name[0]
+        return None
+
     def args_add(self, reg, value):
+        reg = self.getRegKeyFromRegisters(reg)
         data = { "reg": reg, "value": value }
 
         for x in self.args["saved"]:
@@ -57,6 +79,11 @@ class State:
         self.args["saved"].insert(0, data)
 
     def args_get(self, reg):
+        reg = self.getRegKeyFromRegisters(reg)
+
+        if reg == None:
+            return None
+
         for arg in self.args["current"]:
             
             if not isinstance(arg["value"], dict):
@@ -105,9 +132,15 @@ class State:
         print 'nam', self.non_assigned_mem
 
     def read(self, reg):
-        return None if reg not in self.registers.keys() else self.registers[reg]
+        reg = self.getRegKeyFromRegisters(reg)
+        return None if reg == None else self.registers[reg]
 
     def write(self, reg, value):
+        reg = self.getRegKeyFromRegisters(reg)        
+        
+        if reg == None:
+            return
+
         print "\n+++ [%s] <-- %s\n" % (reg, json.dumps(value))
 
         self.registers[reg] = value
@@ -558,7 +591,8 @@ def handleOp(op, func, inst):
         dest = inst["args"]["dest"]
         value = inst["args"]["value"]
 
-        if dest not in state.registers:
+        dest_reg = state.getRegKeyFromRegisters(dest)
+        if dest_reg == None:
             return
         
         if "WORD" in value:

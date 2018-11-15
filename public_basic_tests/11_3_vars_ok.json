@@ -86,7 +86,7 @@
                 "op": "mov",
                 "pos": 6,
                 "args": {
-                    "dest": "rsi",
+                    "dest": "esi",
                     "value": "0x40"
                 },
                 "address": "400587"

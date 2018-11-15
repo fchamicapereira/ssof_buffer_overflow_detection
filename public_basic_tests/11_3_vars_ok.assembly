@@ -5,7 +5,7 @@
 400572:	mov    DWORD PTR [rbp-0x4],0xb
 400579:	mov    rdx,QWORD PTR [rip+0x200ac0]        # 601040 <stdin@@GLIBC_2.2.5>
 400580:	lea    rax,[rbp-0xb0]
-400587:	mov    rsi,0x40
+400587:	mov    esi,0x40
 40058c:	mov    rdi,rax
 40058f:	call   400480 <fgets@plt>
 400594:	lea    rcx,[rbp-0xb0]

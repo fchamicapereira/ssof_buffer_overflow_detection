@@ -4,7 +4,7 @@
 4005bb:	sub    rsp,0xe0
 4005c2:	mov    rdx,QWORD PTR [rip+0x200a77]        # 601040 <stdin@@GLIBC_2.2.5>
 4005c9:	lea    rax,[rbp-0xe0]
-4005d0:	mov    rsi,0x40
+4005d0:	mov    esi,0x40
 4005d5:	mov    rdi,rax
 4005d8:	call   4004d0 <fgets@plt>
 4005dd:	lea    rcx,[rbp-0xe0]
