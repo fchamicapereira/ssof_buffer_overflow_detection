@@ -547,7 +547,7 @@ def handleOp(op, func, inst):
             match = filter(lambda var: var["address"] == value, state.vars)
             
             if len(match) < 1:
-                print "Not found. Searching in the registers (%s)" % json.dump(inst)
+                print "Not found. Searching in the registers"
                 match = state.read(value)
 
                 if match == None:
