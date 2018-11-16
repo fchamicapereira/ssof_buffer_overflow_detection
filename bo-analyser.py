@@ -386,7 +386,6 @@ def handleDng(dngFunc, vuln_func, inst):
         dest["realSize"] = src.get("realSize", 0)
         dest["zeroFlag"] = src["zeroFlag"]
 
-        print 'TEST', dest["realSize"], dest["zeroFlag"]
         # must check if the src has /0
 
         # no overflow
@@ -394,14 +393,16 @@ def handleDng(dngFunc, vuln_func, inst):
             return
 
         # TODO deal with other datatypes
-        if not dest["zeroFlag"]:
+        if not src["zeroFlag"]:
             for v in list(filter(lambda v: "rbp_rel_pos" in v.keys() and v["rbp_rel_pos"] > dest["rbp_rel_pos"], state.vars)):
                 dest["realSize"] += v["realSize"] if "realSize" in v.keys() else v["bytes"]
                 if "zeroFlag" in v.keys() and v["zeroFlag"]:
                     dest["zeroFlag"] = True
                     break
 
-        print 'TEST', dest["realSize"], dest["zeroFlag"]
+        if not dest["zeroFlag"]:
+            dest["realSize"] = -1 * dest["rbp_rel_pos"] + 16
+
         overflowReach(state, vuln_func, inst, addr, dest)
 
     def strcat(vuln_func, inst):
@@ -468,17 +469,19 @@ def handleDng(dngFunc, vuln_func, inst):
         src = state.args["saved"][1]["value"]
         size = state.args["saved"][2]["value"]
         
-        if src["realSize"] == size:
+        srcSize = src["realSize"] + 1 if src["zeroFlag"] else src["realSize"]
+
+        if srcSize == size:
             dest["zeroFlag"] = src["zeroFlag"]
-        elif src["realSize"] < size:
+        elif srcSize < size:
             dest["zeroFlag"] = True
         else:
             dest["zeroFlag"] = False
 
         dest["realSize"] = size - 1 if dest["zeroFlag"] else size
-
+        
         # no overflow
-        if size < dest["bytes"] and dest["zeroFlag"]:
+        if size <= dest["bytes"]:
             return
 
         # overflow
