@@ -73,3 +73,23 @@ for t in tests:
             subprocess.call(['rm', './' + filename_result])
         else:
             print '\033[91m (%d/%d) %s \033[0m' % (len(result), len(solution), filename_in)
+
+            missing = ''
+            not_in_solution = ''
+
+            for s in solution:
+                if s not in result:
+                    if len(missing) == 0:
+                        missing += 'Missing:\n'
+                    missing += json.dumps(s, indent=4, separators=(',', ': ')) + '\n'
+
+            for r in result:
+                if r not in solution:
+                    if len(not_in_solution) == 0:
+                        not_in_solution += 'Not in solution:\n'
+                    not_in_solution += json.dumps(s, indent=4, separators=(',', ': ')) + '\n'
+
+            if len(missing) > 0:
+                print missing
+            if len(not_in_solution) > 0:
+                print not_in_solution
