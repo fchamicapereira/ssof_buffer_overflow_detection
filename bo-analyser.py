@@ -10,6 +10,9 @@ global file_out
 global vulnerabilities
 global currentRetOvf
 global formatRegex
+global debug
+
+debug = False
 
 formatRegex = re.compile('%\d*\w')
 
@@ -109,8 +112,12 @@ class State:
         return None
 
     def savePointer(self, addr, value):
+        global debug
+
         self.pointers[addr] = value
-        print "\n+++ [%s] <-- %s\n" % (addr, json.dumps(value))
+        
+        if debug:
+            print "\n+++ [%s] <-- %s\n" % (addr, json.dumps(value))
 
     def getPointer(self, addr):
         for saved_pointer_addr in self.pointers.keys():
@@ -141,8 +148,6 @@ class State:
             saved_pos = pos
             saved_size = size
 
-        print self.non_assigned_mem
-        
         if saved_pos + saved_size < 0:
             self.non_assigned_mem.append({
                 "start": saved_pos + saved_size,
@@ -154,12 +159,15 @@ class State:
         return None if reg == None else self.registers[reg]
 
     def write(self, reg, value):
-        reg = self.getRegKeyFromRegisters(reg)        
+        global debug
+
+        reg = self.getRegKeyFromRegisters(reg)
         
         if reg == None:
             return
 
-        print "\n+++ [%s] <-- %s\n" % (reg, json.dumps(value))
+        if debug:
+            print "\n  [%s] <-- %s\n" % (reg, json.dumps(value))
 
         self.registers[reg] = value
 
@@ -172,10 +180,14 @@ def setup():
     global program
     global vulnerabilities
     global currentRetOvf
+    global debug
 
     if len(sys.argv) < 2:
         print "Missing json argument"
         exit()
+
+    if len(sys.argv) > 2 and sys.argv[2] == '-d':
+        debug = True
     
     states = []
     file_in = sys.argv[1]
@@ -195,6 +207,7 @@ def setup():
 def analyse_frame(func):
     global states
     global program
+    global debug
 
     vars = program[func]["variables"]
 
@@ -207,16 +220,19 @@ def analyse_frame(func):
     else:
         states.append(State(vars))
 
-    print "begin <%s>" % (func)
+    if debug:
+        print "begin <%s>\n" % (func)
 
     for inst in program[func]["instructions"]:
-        printInst(inst)
+        if debug:
+            printInst(inst)
         op = inst["op"]
         handleOp(op, func, inst)
 
     states.pop()
 
-    print "end <%s>" % (func)
+    if debug:
+        print "\nend <%s>" % (func)
 
 def run():
     global states
@@ -371,8 +387,6 @@ def handleDng(dngFunc, vuln_func, inst):
         if var["zeroFlag"]:
             reach += 1
 
-        for v in state.vars:
-            print 'vars', v
         # variable overflow
         for v in vars:
             if reach >= v["rbp_rel_pos"]:
@@ -384,8 +398,6 @@ def handleDng(dngFunc, vuln_func, inst):
 
             if reach > mem["start"]:
                 invalidAccs(vuln_func, addr, dngFunc, var["name"], mem_addr)
-
-        print var["name"], var["rbp_rel_pos"], var["realSize"], reach
 
         # RBP overflow
         if reach > 0:
@@ -441,8 +453,6 @@ def handleDng(dngFunc, vuln_func, inst):
 
         if not dest["zeroFlag"]:
             dest["realSize"] = -1 * dest["rbp_rel_pos"] + 17
-
-        print 'dest', dest, dest["rbp_rel_pos"] + dest["realSize"]
 
         overflowReach(state, vuln_func, inst, addr, dest)
 
@@ -674,11 +684,13 @@ def handleOp(op, func, inst):
     def call(func, inst):
         global program
         global states
+        global debug
 
         state = states[len(states) - 1]
         state.args["saved"] = sorted(state.args["saved"], key = lambda arg: state.args["regs"].index(arg['reg']))
         
-        printArgs()
+        if debug:
+            printArgs()
 
         newFunc = inst["args"]["fnname"][1:-1] # <funcion-name> or <function-name>@plt
 
@@ -694,6 +706,7 @@ def handleOp(op, func, inst):
     def lea(func, inst):
         global program
         global states
+        global debug
 
         state = states[len(states) - 1]
 
@@ -710,14 +723,14 @@ def handleOp(op, func, inst):
                 match = filter(lambda var: var["address"] == value, state.vars)
                 
                 if len(match) < 1:
-                    print "Not found. Searching in the registers"
+                    if debug:
+                        print "Not found. Searching in the registers"
                     match = state.read(value)
 
-                    #TODO cant find rdi, for example, create new register?
+                    # TODO cant find rdi, for example, create new register?
 
-                    if match == None:
+                    if match == None and debug:
                         print "Not found on the registers. Exiting"
-                        exit()
 
                     var = match
 
@@ -761,7 +774,6 @@ def handleOp(op, func, inst):
                 match = filter(lambda var: var["address"] == value, vars)
 
                 if len(match) > 0:
-                    print vars, match
                     if len(match) < 1:
                         state.write(dest, value)
                     else:
@@ -814,7 +826,6 @@ def handleOp(op, func, inst):
                 value = int(value, 16)
 
                 for mem in state.non_assigned_mem:
-                    print mem, addrDec
                     if addrDec >= mem["start"] and addrDec < mem["end"]:
                         invalidAccsOp(func, 'mov', inst["address"], addr)
                         return
@@ -861,7 +872,7 @@ def handleOp(op, func, inst):
 # ----------------------------------
 
 def printInst(inst):
-    s = "{0}: {1} ".format(inst["pos"], inst["op"])
+    s = "0x{0}: {1} ".format(inst["address"], inst["op"])
 
     if "args" in inst.keys():
         if "fnname" in inst["args"].keys():
