@@ -149,8 +149,6 @@ class State:
                 "end": -1
             })
 
-        print 'nam', self.non_assigned_mem
-
     def read(self, reg):
         reg = self.getRegKeyFromRegisters(reg)
         return None if reg == None else self.registers[reg]
@@ -303,6 +301,23 @@ def invalidAccs(vuln_func, addr, fnname, var, overflown_addr):
         "overflow_var": var,
         "vuln_function": vuln_func,
         "overflown_address": overflown_addr
+    }
+
+    vulnerabilities.append(vuln)
+
+def invalidAccsOp(vuln_func, op, addr, overflown_addr):
+    global vulnerabilities
+    global currentRetOvf
+    
+    if currentRetOvf != None and vuln_func != currentRetOvf:
+        return
+
+    vuln = {
+        "overflown_address": overflown_addr,
+        "op": op,
+        "vuln_function": vuln_func,
+        "address": addr,
+        "vulnerability": "INVALIDACCS"
     }
 
     vulnerabilities.append(vuln)
@@ -738,7 +753,7 @@ def handleOp(op, func, inst):
                     return
 
                 content = state.getPointer(value)
-                print 'content of', value, content
+
                 if content != None:
                     state.write(dest, content)
                     return
@@ -759,13 +774,26 @@ def handleOp(op, func, inst):
                 state.write(dest, value)
 
         # from register
-        if value_reg != None:
+        elif value_reg != None:
             content = state.read(value_reg)
             
             # to pointer
             if 'PTR' in dest:
                 dest = dest.split(' ')[2][1:-1]
                 state.savePointer(dest, content)
+
+        # to pointer
+        elif 'PTR' in dest:
+            addr = dest.split(' ')[2][1:-1]
+            addrDec = int(addr.split('rbp')[1], 16)
+            
+            if '0x' in value and 'rip' not in value:
+                value = int(value, 16)
+
+                for mem in state.non_assigned_mem:
+                    print mem, addrDec
+                    if addrDec >= mem["start"] and addrDec < mem["end"]:
+                        invalidAccsOp(func, 'mov', inst["address"], addr)
 
     def sub(func, inst):
         global states
