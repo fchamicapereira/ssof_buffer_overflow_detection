@@ -595,17 +595,18 @@ def handleDng(dngFunc, vuln_func, inst):
         addr = inst["address"]
         
         # int snprintf(char *str, size_t size, const char *format, ...);
-        
-        dest = state.args["saved"][0]["value"]
+        formatS = re.findall(formatRegex, state.args["saved"][2]["value"])
         size = state.args["saved"][1]["value"]
+        dest = state.args["saved"][0]["value"]
 
         dest["realSize"] = size
 
-        # no overflow
-        if size <= dest["bytes"]:
-            return
+        # snprintf adds always /0
+        dest["zeroFlag"] = True
+
+        if dest["bytes"] <= size:
+            return;
         
-        # overflow
         overflowReach(state, vuln_func, inst, addr, dest)
 
     def read(vuln_func, inst):
