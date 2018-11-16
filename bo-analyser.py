@@ -795,6 +795,21 @@ def handleOp(op, func, inst):
                     if addrDec >= mem["start"] and addrDec < mem["end"]:
                         invalidAccsOp(func, 'mov', inst["address"], addr)
                         return
+                
+                # \0 character
+                if value == 0:
+                    for v in vars:
+                        if "rbp_rel_pos" not in v.keys():
+                            continue
+
+                        start = v["rbp_rel_pos"]
+                        end = v["rbp_rel_pos"] + v["bytes"]
+
+                        if addrDec >= start and addrDec < end:
+                            v["realSize"] = addrDec - start
+                            v["zeroFlag"] = True
+                            break
+
 
     def sub(func, inst):
         global states
