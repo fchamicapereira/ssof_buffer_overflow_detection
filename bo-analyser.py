@@ -67,6 +67,7 @@ class State:
         result = sorted(result, key = lambda v: v['rbp_rel_pos']) 
 
         self.vars = result
+
         self.calc_non_assigned_memory()
 
     def getRegKeyFromRegisters(self, reg):
@@ -331,6 +332,9 @@ def handleDng(dngFunc, vuln_func, inst):
 
         reach = var["realSize"] + var["rbp_rel_pos"]
 
+        if var["zeroFlag"]:
+            reach += 1
+
         for v in state.vars:
             print 'vars', v
         # variable overflow
@@ -341,11 +345,12 @@ def handleDng(dngFunc, vuln_func, inst):
         # invalid write access to non-assigned memory
         for mem in state.non_assigned_mem:
             mem_addr = "rbp" + hex(mem["start"])
-            print mem_addr, mem["start"], reach
 
             if reach > mem["start"]:
                 invalidAccs(vuln_func, addr, dngFunc, var["name"], mem_addr)
+
         print var["name"], var["rbp_rel_pos"], var["realSize"], reach
+
         # RBP overflow
         if reach >= 0:
             rbpOvf(vuln_func, addr, dngFunc, var["name"])
@@ -386,8 +391,6 @@ def handleDng(dngFunc, vuln_func, inst):
         dest["realSize"] = src.get("realSize", 0)
         dest["zeroFlag"] = src["zeroFlag"]
 
-        # must check if the src has /0
-
         # no overflow
         if dest["realSize"] < dest["bytes"] and src["zeroFlag"]:
             return
@@ -402,6 +405,8 @@ def handleDng(dngFunc, vuln_func, inst):
 
         if not dest["zeroFlag"]:
             dest["realSize"] = -1 * dest["rbp_rel_pos"] + 16
+
+        print 'dest', dest, dest["rbp_rel_pos"] + dest["realSize"]
 
         overflowReach(state, vuln_func, inst, addr, dest)
 
