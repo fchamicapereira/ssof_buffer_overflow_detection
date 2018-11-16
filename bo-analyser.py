@@ -549,7 +549,6 @@ def handleDng(dngFunc, vuln_func, inst):
 
             overflowReach(state, vuln_func, inst, addr, dest)
 
-
     def fscanf(vuln_func, inst):
         global program
         global states
@@ -599,7 +598,23 @@ def handleDng(dngFunc, vuln_func, inst):
         global states
 
         state = states[len(states) - 1]
-        # TODO
+
+        # ssize_t read(int fildes, void *buf, size_t nbyte);
+
+        addr = inst["address"]
+        
+        dest = state.args["saved"][1]["value"]
+        size = state.args["saved"][2]["value"]
+
+        dest["realSize"] = size
+        dest["zeroFlag"] = False
+
+        # no overflow
+        if size <= dest["bytes"]:
+            return
+        
+        # overflow
+        overflowReach(state, vuln_func, inst, addr, dest)
 
     dng = {
         "gets": gets,
