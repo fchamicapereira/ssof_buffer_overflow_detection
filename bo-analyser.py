@@ -581,14 +581,13 @@ def handleDng(dngFunc, vuln_func, inst):
         "strncat": strncat,
         "sprintf": sprintf,
         "scanf": scanf,
-        "fscanf": fscanf,
+        "__isoc99_fscanf": fscanf,
         "snprintf": snprintf,
         "read": read
     }
 
-    for key in dng.keys():
-        if key in dngFunc:
-            dng[key](vuln_func, inst)
+    if dngFunc in dng.keys():
+        dng[dngFunc](vuln_func, inst)
 
 # ----------------------------------
 #          OPERATOR HANDLERS
