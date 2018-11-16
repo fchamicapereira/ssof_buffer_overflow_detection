@@ -2,12 +2,16 @@
 import json
 import sys
 import os
+import re
 
 global states
 global program
 global file_out
 global vulnerabilities
 global currentRetOvf
+global formatRegex
+
+formatRegex = re.compile('%\d*\w')
 
 # ----------------------------------
 #             HELPERS
@@ -536,11 +540,14 @@ def handleDng(dngFunc, vuln_func, inst):
     def fscanf(vuln_func, inst):
         global program
         global states
+        global formatRegex
+
+        # int fscanf(FILE *restrict stream, const char *restrict format, ...);
 
         state = states[len(states) - 1]
         addr = inst["address"]
 
-        formatS = state.args["saved"][1]["value"].split(' ')
+        formatS = re.findall(formatRegex, state.args["saved"][1]["value"])
         outputs = state.args["saved"][2:]
 
         for i in range(len(formatS)):
