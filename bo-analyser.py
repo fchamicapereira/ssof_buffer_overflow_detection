@@ -340,6 +340,23 @@ def sCorruption(vuln_func, addr, fnname, var):
 
     vulnerabilities.append(vuln)
 
+def sCorruptionOp(vuln_func, op, addr, overflown_addr):
+    global vulnerabilities
+    global currentRetOvf
+
+    if currentRetOvf != None and vuln_func != currentRetOvf:
+        return
+
+    vuln = {
+        "vulnerability": "SCORRUPTION",
+        "vuln_function": vuln_func,
+        "address": addr,
+        "op": op,
+        "overflown_address": overflown_addr
+    }
+
+    vulnerabilities.append(vuln)
+
 # ----------------------------------
 #       DANGEROUS FUNC HANDLERS
 # ----------------------------------
@@ -787,6 +804,10 @@ def handleOp(op, func, inst):
         elif 'PTR' in dest:
             addr = dest.split(' ')[2][1:-1]
             addrDec = int(addr.split('rbp')[1], 16)
+
+            if addrDec >= 16:
+                sCorruptionOp(func, 'mov', inst["address"], addr)
+                return
             
             if '0x' in value and 'rip' not in value:
                 value = int(value, 16)
@@ -809,7 +830,7 @@ def handleOp(op, func, inst):
                         if addrDec >= start and addrDec < end:
                             v["realSize"] = addrDec - start
                             v["zeroFlag"] = True
-                            break
+                            return
 
 
     def sub(func, inst):
