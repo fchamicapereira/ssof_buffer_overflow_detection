@@ -87,7 +87,7 @@ for t in tests:
                 if r not in solution:
                     if len(not_in_solution) == 0:
                         not_in_solution += 'Not in solution:\n'
-                    not_in_solution += json.dumps(s, indent=4, separators=(',', ': ')) + '\n'
+                    not_in_solution += json.dumps(r, indent=4, separators=(',', ': ')) + '\n'
 
             if len(missing) > 0:
                 print missing
