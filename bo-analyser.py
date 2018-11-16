@@ -536,7 +536,7 @@ def handleDng(dngFunc, vuln_func, inst):
         state = states[len(states) - 1]
         addr = inst["address"]
 
-        formatS = state.args["saved"][0]["value"].split(' ')
+        formatS = re.findall(formatRegex, state.args["saved"][0]["value"])
         outputs = state.args["saved"][1:]
 
         for i in range(len(formatS)):
