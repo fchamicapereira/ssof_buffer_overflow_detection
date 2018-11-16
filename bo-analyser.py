@@ -731,12 +731,11 @@ def handleOp(op, func, inst):
 
         state = states[len(states) - 1]
 
-        # TODO handle all the possible cases of mov arguments (are all needed?)
         # register to register
-        # register to pointer
-
         # pointer to register
         # number to register
+
+        # register to pointer
         
         # number to pointer
         
@@ -776,6 +775,7 @@ def handleOp(op, func, inst):
                     state.write(dest, content)
                     return
 
+            # from register
             if state.read(value) != None:
                 content = state.read(value)
                 state.write(dest, content)
@@ -784,6 +784,7 @@ def handleOp(op, func, inst):
                 content = state.args_get(value)
                 state.write(dest, content)
 
+            # from value
             elif '0x' in value and 'rip' not in value:
                 value = int(value, 16)
                 state.write(dest, value)
