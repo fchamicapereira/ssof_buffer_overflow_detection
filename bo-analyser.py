@@ -794,6 +794,7 @@ def handleOp(op, func, inst):
                     print mem, addrDec
                     if addrDec >= mem["start"] and addrDec < mem["end"]:
                         invalidAccsOp(func, 'mov', inst["address"], addr)
+                        return
 
     def sub(func, inst):
         global states
