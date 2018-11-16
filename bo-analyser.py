@@ -643,6 +643,8 @@ def handleOp(op, func, inst):
         global states
 
         state = states[len(states) - 1]
+        state.args["saved"] = sorted(state.args["saved"], key = lambda arg: state.args["regs"].index(arg['reg']))
+        
         printArgs()
 
         newFunc = inst["args"]["fnname"][1:-1] # <funcion-name> or <function-name>@plt
