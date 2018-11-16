@@ -534,7 +534,20 @@ def handleDng(dngFunc, vuln_func, inst):
         global states
 
         state = states[len(states) - 1]
-        # TODO
+        addr = inst["address"]
+
+        formatS = state.args["saved"][0]["value"].split(' ')
+        outputs = state.args["saved"][1:]
+
+        for i in range(len(formatS)):
+            f = formatS[i]
+            dest = outputs[i]["value"]
+
+            # can always overflow
+            dest["realSize"] = -1 * dest["rbp_rel_pos"] + 17
+            dest["zeroFlag"] = True
+
+            overflowReach(state, vuln_func, inst, addr, dest)
 
 
     def fscanf(vuln_func, inst):
@@ -596,7 +609,7 @@ def handleDng(dngFunc, vuln_func, inst):
         "strncpy": strncpy,
         "strncat": strncat,
         "sprintf": sprintf,
-        "scanf": scanf,
+        "__isoc99_scanf": scanf,
         "__isoc99_fscanf": fscanf,
         "snprintf": snprintf,
         "read": read
