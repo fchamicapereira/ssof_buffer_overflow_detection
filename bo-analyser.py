@@ -327,10 +327,12 @@ def sCorruption(vuln_func, addr, fnname, var):
 def handleDng(dngFunc, vuln_func, inst):
 
     def overflowReach(state, vuln_func, inst, addr, var):
-        reach = var["realSize"] + var["rbp_rel_pos"]
-
         vars = list(filter(lambda v: "rbp_rel_pos" in v.keys() and v["rbp_rel_pos"] > var["rbp_rel_pos"], state.vars))
 
+        reach = var["realSize"] + var["rbp_rel_pos"]
+
+        for v in state.vars:
+            print 'vars', v
         # variable overflow
         for v in vars:
             if reach >= v["rbp_rel_pos"]:
@@ -343,7 +345,7 @@ def handleDng(dngFunc, vuln_func, inst):
 
             if reach > mem["start"]:
                 invalidAccs(vuln_func, addr, dngFunc, var["name"], mem_addr)
-        
+        print var["name"], var["rbp_rel_pos"], var["realSize"], reach
         # RBP overflow
         if reach >= 0:
             rbpOvf(vuln_func, addr, dngFunc, var["name"])
@@ -366,6 +368,7 @@ def handleDng(dngFunc, vuln_func, inst):
 
         arg = state.args["saved"][0]["value"]
         arg["realSize"] = -1 * arg["rbp_rel_pos"] + 100 # just to make it overflow everything
+        arg["zeroFlag"] = False
 
         overflowReach(state, vuln_func, inst, addr, arg)
 
@@ -381,11 +384,24 @@ def handleDng(dngFunc, vuln_func, inst):
 
         # in case there is a strcpy without an assignment to the source buffer
         dest["realSize"] = src.get("realSize", 0)
+        dest["zeroFlag"] = src["zeroFlag"]
+
+        print 'TEST', dest["realSize"], dest["zeroFlag"]
+        # must check if the src has /0
 
         # no overflow
-        if dest["realSize"] <= dest["bytes"]:
+        if dest["realSize"] < dest["bytes"] and src["zeroFlag"]:
             return
 
+        # TODO deal with other datatypes
+        if not dest["zeroFlag"]:
+            for v in list(filter(lambda v: "rbp_rel_pos" in v.keys() and v["rbp_rel_pos"] > dest["rbp_rel_pos"], state.vars)):
+                dest["realSize"] += v["realSize"] if "realSize" in v.keys() else v["bytes"]
+                if "zeroFlag" in v.keys() and v["zeroFlag"]:
+                    dest["zeroFlag"] = True
+                    break
+
+        print 'TEST', dest["realSize"], dest["zeroFlag"]
         overflowReach(state, vuln_func, inst, addr, dest)
 
     def strcat(vuln_func, inst):
@@ -404,7 +420,8 @@ def handleDng(dngFunc, vuln_func, inst):
         dest = state.args["saved"][0]["value"]
         src = state.args["saved"][1]["value"]
 
-        dest["realSize"] = dest["realSize"] + src["realSize"] - 1
+        dest["realSize"] = dest["realSize"] + src["realSize"] 
+        dest["zeroFlag"] = True
 
         # everything is ok
         if dest["realSize"] <= dest["bytes"]:
@@ -426,7 +443,8 @@ def handleDng(dngFunc, vuln_func, inst):
         dest = state.args["saved"][0]["value"]
         size = state.args["saved"][1]["value"]
 
-        dest["realSize"] = size
+        dest["realSize"] = size - 1
+        dest["zeroFlag"] = True
 
         # no overflow
         if size <= dest["bytes"]:
@@ -443,16 +461,26 @@ def handleDng(dngFunc, vuln_func, inst):
         addr = inst["address"]
         
         # char *strncpy(char *dest, const char *src, size_t n)
+        # strncpy produces  an  unterminated  string in dest if srcSize > size (doesn't write /0)
+        # copies n bytes including /0, it it exists in src[n]
         
         dest = state.args["saved"][0]["value"]
+        src = state.args["saved"][1]["value"]
         size = state.args["saved"][2]["value"]
+        
+        if src["realSize"] == size:
+            dest["zeroFlag"] = src["zeroFlag"]
+        elif src["realSize"] < size:
+            dest["zeroFlag"] = True
+        else:
+            dest["zeroFlag"] = False
 
-        dest["realSize"] = size
+        dest["realSize"] = size - 1 if dest["zeroFlag"] else size
 
         # no overflow
-        if size <= dest["bytes"]:
+        if size < dest["bytes"] and dest["zeroFlag"]:
             return
-        
+
         # overflow
         overflowReach(state, vuln_func, inst, addr, dest)
 
@@ -469,7 +497,8 @@ def handleDng(dngFunc, vuln_func, inst):
         dest = state.args["saved"][0]["value"]
         size = state.args["saved"][2]["value"]
 
-        dest["realSize"] = dest["realSize"] + size - 1
+        dest["realSize"] = dest["realSize"] + size
+        dest["zeroFlag"] = True
         
         # no overflow
         if size <= dest["bytes"]:
