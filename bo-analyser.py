@@ -616,25 +616,30 @@ def handleOp(op, func, inst):
 
         value = inst["args"]["value"]
         dest = inst["args"]["dest"]
-
+        
         if value[0] == '[':
-            value = value[1:-1]
-            match = filter(lambda var: var["address"] == value, state.vars)
-            
-            if len(match) < 1:
-                print "Not found. Searching in the registers"
-                match = state.read(value)
-
-                #TODO cant find rdi, for example, create new register?
-
-                if match == None:
-                    print "Not found on the registers. Exiting"
-                    exit()
-
-                var = match
+            if 'rip' in value:
+                formatS = inst["args"]["obs"]
+                var = formatS
 
             else:
-                var = match[0]
+                value = value[1:-1]
+                match = filter(lambda var: var["address"] == value, state.vars)
+                
+                if len(match) < 1:
+                    print "Not found. Searching in the registers"
+                    match = state.read(value)
+
+                    #TODO cant find rdi, for example, create new register?
+
+                    if match == None:
+                        print "Not found on the registers. Exiting"
+                        exit()
+
+                    var = match
+
+                else:
+                    var = match[0]
 
             state.write(dest, var)
 
@@ -752,7 +757,7 @@ def printInst(inst):
             s += inst["args"]["value"] + ' '
 
         if "obs" in inst["args"].keys():
-            s += inst["args"]["obs"] + ' '
+            s += '// ' + inst["args"]["obs"] + ' '
 
     print s
 
