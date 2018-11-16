@@ -538,11 +538,20 @@ def handleDng(dngFunc, vuln_func, inst):
         global states
 
         state = states[len(states) - 1]
+        addr = inst["address"]
 
-        formatS = state.args["saved"][1]
-        outputs = state.args["saved"][:2]
+        formatS = state.args["saved"][1]["value"].split(' ')
+        outputs = state.args["saved"][2:]
 
-        print formatS, outputs
+        for i in range(len(formatS)):
+            f = formatS[i]
+            dest = outputs[i]["value"]
+
+            # can always overflow
+            dest["realSize"] = -1 * dest["rbp_rel_pos"] + 17
+            dest["zeroFlag"] = True
+
+            overflowReach(state, vuln_func, inst, addr, dest)
 
     def snprintf(vuln_func, inst):
         global program
