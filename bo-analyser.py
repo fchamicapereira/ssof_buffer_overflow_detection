@@ -538,7 +538,11 @@ def handleDng(dngFunc, vuln_func, inst):
         global states
 
         state = states[len(states) - 1]
-        # TODO
+
+        formatS = state.args["saved"][1]
+        outputs = state.args["saved"][:2]
+
+        print formatS, outputs
 
     def snprintf(vuln_func, inst):
         global program
@@ -582,8 +586,9 @@ def handleDng(dngFunc, vuln_func, inst):
         "read": read
     }
 
-    if dngFunc in dng.keys():
-        dng[dngFunc](vuln_func, inst)
+    for key in dng.keys():
+        if key in dngFunc:
+            dng[key](vuln_func, inst)
 
 # ----------------------------------
 #          OPERATOR HANDLERS
