@@ -352,15 +352,15 @@ def handleDng(dngFunc, vuln_func, inst):
         print var["name"], var["rbp_rel_pos"], var["realSize"], reach
 
         # RBP overflow
-        if reach >= 0:
+        if reach > 0:
             rbpOvf(vuln_func, addr, dngFunc, var["name"])
 
         # RET overflow
-        if reach >= 8:
+        if reach > 8:
             retOvf(vuln_func, addr, dngFunc, var["name"])
 
         # invalid write access to memory out of the current frame
-        if reach >= 16:
+        if reach > 16:
             sCorruption(vuln_func, addr, dngFunc, var["name"])
     
     # with this function, everything can be overflown
@@ -372,7 +372,7 @@ def handleDng(dngFunc, vuln_func, inst):
         addr = inst["address"]
 
         arg = state.args["saved"][0]["value"]
-        arg["realSize"] = -1 * arg["rbp_rel_pos"] + 100 # just to make it overflow everything
+        arg["realSize"] = -1 * arg["rbp_rel_pos"] + 17 # just to make it overflow everything
         arg["zeroFlag"] = False
 
         overflowReach(state, vuln_func, inst, addr, arg)
@@ -404,7 +404,7 @@ def handleDng(dngFunc, vuln_func, inst):
                     break
 
         if not dest["zeroFlag"]:
-            dest["realSize"] = -1 * dest["rbp_rel_pos"] + 16
+            dest["realSize"] = -1 * dest["rbp_rel_pos"] + 17
 
         print 'dest', dest, dest["rbp_rel_pos"] + dest["realSize"]
 
