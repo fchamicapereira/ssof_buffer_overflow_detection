@@ -64,7 +64,7 @@ for t in tests:
             f_result = open(filename_result, 'r')
             result = json.loads(f_result.read())
         except IOError:
-            print '\033[91m (0/0) %s \033[0m' % (filename_in)
+            solution = []
 
         f_solution = open('{0}/{1}'.format(path, filename_result), 'r')
         solution = json.loads(f_solution.read())
