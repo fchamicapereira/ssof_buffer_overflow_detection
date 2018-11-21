@@ -69,9 +69,9 @@ class State:
         for v in vars:
             v["rbp_rel_pos"] = int(v["address"][3:], 16) # pos relative to rbp
             result.append(v)
-        
+
         # sort by position in stack
-        result = sorted(result, key = lambda v: v['rbp_rel_pos']) 
+        result = sorted(result, key = lambda v: v['rbp_rel_pos'])
 
         self.vars = result
 
@@ -102,7 +102,7 @@ class State:
             return None
 
         for arg in self.args["current"]:
-            
+
             if not isinstance(arg["value"], dict):
                 continue
 
@@ -115,7 +115,7 @@ class State:
         global debug
 
         self.pointers[addr] = value
-        
+
         if debug:
             print "\n+++ [%s] <-- %s\n" % (addr, json.dumps(value))
 
@@ -129,7 +129,7 @@ class State:
         self.non_assigned_mem = []
         saved_pos = None
         saved_size = None
-        
+
         if len(self.vars) == 0:
             return
 
@@ -162,7 +162,7 @@ class State:
         global debug
 
         reg = self.getRegKeyFromRegisters(reg)
-        
+
         if reg == None:
             return
 
@@ -188,7 +188,7 @@ def setup():
 
     if len(sys.argv) > 2 and sys.argv[2] == '-d':
         debug = True
-    
+
     states = []
     file_in = sys.argv[1]
     filename_split = os.path.splitext(file_in)
@@ -197,7 +197,7 @@ def setup():
 
     if filename_split[len(filename_split) - 1] != ".json":
         print "Invalid extension"
-        exit()      
+        exit()
 
     file_out = os.path.basename(filename_split[0]) + ".output.json"
     f = open(file_in, 'r')
@@ -223,19 +223,20 @@ def analyse_frame(func):
     if debug:
         print "begin <%s>\n" % (func)
 
-    inst = program[func]["instructions"][0]
-    nextInstPos = 0
+    instPos = 0
+    while instPos < program[func]["Ninstructions"]:
+        inst = program[func]["instructions"][instPos]
 
-    while nextInstPos+1 < program[func]["Ninstructions"]:
         if debug:
             printInst(inst)
         op = inst["op"]
         handleOp(op, func, inst)
 
-        # TODO check jpm
-        nextInstPos = inst["pos"]+1
+        if op in ["jmp", "je", "jne", "jz", "jg", "jge", "jl", "jle"]:
+            instPos = next(filter(lambda v: v["address"] == inst["args"]["address"], program[func]["Ninstructions"]), None)["op"]
+        else:
+            instPos = inst["pos"]+1
 
-        inst = program[func]["instructions"][nextInstPos]
 
     states.pop()
 
@@ -332,7 +333,7 @@ def invalidAccs(vuln_func, addr, fnname, var, overflown_addr):
 def invalidAccsOp(vuln_func, op, addr, overflown_addr):
     global vulnerabilities
     global currentRetOvf
-    
+
     if currentRetOvf != None and vuln_func != currentRetOvf:
         return
 
@@ -418,7 +419,7 @@ def handleDng(dngFunc, vuln_func, inst):
         # invalid write access to memory out of the current frame
         if reach > 16:
             sCorruption(vuln_func, addr, dngFunc, var["name"])
-    
+
     # with this function, everything can be overflown
     def gets(vuln_func, inst):
         global program
@@ -476,11 +477,11 @@ def handleDng(dngFunc, vuln_func, inst):
         # append s2 to s1
         # copies N-1 bytes from s2 and appends to N-1 bytes from s1
         # total size is 2N-2 + \0 (2N-1)
-        
+
         dest = state.args["saved"][0]["value"]
         src = state.args["saved"][1]["value"]
 
-        dest["realSize"] = dest["realSize"] + src["realSize"] 
+        dest["realSize"] = dest["realSize"] + src["realSize"]
         dest["zeroFlag"] = True
 
         # everything is ok
@@ -519,15 +520,15 @@ def handleDng(dngFunc, vuln_func, inst):
 
         state = states[len(states) - 1]
         addr = inst["address"]
-        
+
         # char *strncpy(char *dest, const char *src, size_t n)
         # strncpy produces  an  unterminated  string in dest if srcSize > size (doesn't write /0)
         # copies n bytes including /0, it it exists in src[n]
-        
+
         dest = state.args["saved"][0]["value"]
         src = state.args["saved"][1]["value"]
         size = state.args["saved"][2]["value"]
-        
+
         srcSize = src["realSize"] + 1 if src["zeroFlag"] else src["realSize"]
 
         if srcSize == size:
@@ -538,7 +539,7 @@ def handleDng(dngFunc, vuln_func, inst):
             dest["zeroFlag"] = False
 
         dest["realSize"] = size - 1 if dest["zeroFlag"] else size
-        
+
         # no overflow
         if size <= dest["bytes"]:
             return
@@ -555,17 +556,17 @@ def handleDng(dngFunc, vuln_func, inst):
         addr = inst["address"]
 
         # char *strncat(char *dest, const char *src, size_t n);
-        
+
         dest = state.args["saved"][0]["value"]
         size = state.args["saved"][2]["value"]
 
         dest["realSize"] = dest["realSize"] + size
         dest["zeroFlag"] = True
-        
+
         # no overflow
         if size <= dest["bytes"]:
             return
-        
+
         # overflow
         overflowReach(state, vuln_func, inst, addr, dest)
 
@@ -628,7 +629,7 @@ def handleDng(dngFunc, vuln_func, inst):
 
         state = states[len(states) - 1]
         addr = inst["address"]
-        
+
         # int snprintf(char *str, size_t size, const char *format, ...);
         formatS = re.findall(formatRegex, state.args["saved"][2]["value"])
         size = state.args["saved"][1]["value"]
@@ -641,7 +642,7 @@ def handleDng(dngFunc, vuln_func, inst):
 
         if dest["bytes"] <= size:
             return;
-        
+
         overflowReach(state, vuln_func, inst, addr, dest)
 
     def read(vuln_func, inst):
@@ -653,7 +654,7 @@ def handleDng(dngFunc, vuln_func, inst):
         # ssize_t read(int fildes, void *buf, size_t nbyte);
 
         addr = inst["address"]
-        
+
         dest = state.args["saved"][1]["value"]
         size = state.args["saved"][2]["value"]
 
@@ -663,7 +664,7 @@ def handleDng(dngFunc, vuln_func, inst):
         # no overflow
         if size <= dest["bytes"]:
             return
-        
+
         # overflow
         overflowReach(state, vuln_func, inst, addr, dest)
 
@@ -696,7 +697,7 @@ def handleOp(op, func, inst):
 
         state = states[len(states) - 1]
         state.args["saved"] = sorted(state.args["saved"], key = lambda arg: state.args["regs"].index(arg['reg']))
-        
+
         if debug:
             printArgs()
 
@@ -708,7 +709,7 @@ def handleOp(op, func, inst):
         elif '@' in newFunc:
             newFunc = newFunc.split('@')[0]
             handleDng(newFunc, func, inst)
-        
+
         state.args["saved"] = []
 
     def lea(func, inst):
@@ -720,7 +721,7 @@ def handleOp(op, func, inst):
 
         value = inst["args"]["value"]
         dest = inst["args"]["dest"]
-        
+
         if value[0] == '[':
             if 'rip' in value:
                 formatS = inst["args"]["obs"]
@@ -729,7 +730,7 @@ def handleOp(op, func, inst):
             else:
                 value = value[1:-1]
                 match = filter(lambda var: var["address"] == value, state.vars)
-                
+
                 if len(match) < 1:
                     if debug:
                         print "Not found. Searching in the registers"
@@ -757,9 +758,9 @@ def handleOp(op, func, inst):
         # number to register
 
         # register to pointer
-        
+
         # number to pointer
-        
+
         vars = program[func]["variables"]
 
         dest = inst["args"]["dest"]
@@ -774,11 +775,11 @@ def handleOp(op, func, inst):
             # from pointer   
             if "PTR" in value:
                 value = value.split(' ')[2][1:-1]
-                
+
                 if state.args_get(value) != None:
                     state.write(dest, state.args_get(value))
                     return
-                
+
                 match = filter(lambda var: var["address"] == value, vars)
 
                 if len(match) > 0:
@@ -815,7 +816,7 @@ def handleOp(op, func, inst):
         # from register
         elif value_reg != None:
             content = state.read(value_reg)
-            
+
             # to pointer
             if 'PTR' in dest:
                 dest = dest.split(' ')[2][1:-1]
@@ -829,7 +830,7 @@ def handleOp(op, func, inst):
             if addrDec >= 16:
                 sCorruptionOp(func, 'mov', inst["address"], addr)
                 return
-            
+
             if '0x' in value and 'rip' not in value:
                 value = int(value, 16)
 
@@ -837,7 +838,7 @@ def handleOp(op, func, inst):
                     if addrDec >= mem["start"] and addrDec < mem["end"]:
                         invalidAccsOp(func, 'mov', inst["address"], addr)
                         return
-                
+
                 # \0 character
                 if value == 0:
                     for v in vars:
