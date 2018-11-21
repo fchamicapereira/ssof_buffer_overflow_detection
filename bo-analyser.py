@@ -232,7 +232,7 @@ def analyse_frame(func, instPos=0):
         handleOp(op, func, inst)
 
         if op in ["jmp", "je", "jne", "jz", "jg", "jge", "jl", "jle"]:
-            instPosJmp = next(filter(lambda v: v["address"] == inst["args"]["address"], program[func]["Ninstructions"]), None)["op"]
+            instPosJmp = filter(lambda v: v["address"] == inst["args"]["address"], program[func]["instructions"])[0]["pos"]
 
             if op == "jmp":
                 instPos = instPosJmp
