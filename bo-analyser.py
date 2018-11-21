@@ -223,11 +223,19 @@ def analyse_frame(func):
     if debug:
         print "begin <%s>\n" % (func)
 
-    for inst in program[func]["instructions"]:
+    inst = program[func]["instructions"][0]
+    nextInstPos = 0
+
+    while nextInstPos+1 < program[func]["Ninstructions"]:
         if debug:
             printInst(inst)
         op = inst["op"]
         handleOp(op, func, inst)
+
+        # TODO check jpm
+        nextInstPos = inst["pos"]+1
+
+        inst = program[func]["instructions"][nextInstPos]
 
     states.pop()
 
