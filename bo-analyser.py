@@ -268,6 +268,9 @@ def run():
     analyse_frame("main")
 
     f = open(file_out, 'w')
+
+    # remove duplicates
+    vulnerabilities = [dict(t) for t in { tuple(vuln.items()) for vuln in vulnerabilities}]
     f.write(json.dumps(vulnerabilities, indent=4, separators=(',', ': ')))
 
 # ----------------------------------
