@@ -204,7 +204,7 @@ def setup():
     program_json = f.read()
     program = json.loads(program_json)
 
-def analyse_frame(func):
+def analyse_frame(func, instPos=0):
     global states
     global program
     global debug
@@ -223,7 +223,6 @@ def analyse_frame(func):
     if debug:
         print "begin <%s>\n" % (func)
 
-    instPos = 0
     while instPos < program[func]["Ninstructions"]:
         inst = program[func]["instructions"][instPos]
 
@@ -233,7 +232,13 @@ def analyse_frame(func):
         handleOp(op, func, inst)
 
         if op in ["jmp", "je", "jne", "jz", "jg", "jge", "jl", "jle"]:
-            instPos = next(filter(lambda v: v["address"] == inst["args"]["address"], program[func]["Ninstructions"]), None)["op"]
+            instPosJmp = next(filter(lambda v: v["address"] == inst["args"]["address"], program[func]["Ninstructions"]), None)["op"]
+
+            if op == "jmp":
+                instPos = instPosJmp
+            else:
+                analyse_frame(func, instPosJmp)
+                instPos = inst["pos"] + 1
         else:
             instPos = inst["pos"]+1
 
