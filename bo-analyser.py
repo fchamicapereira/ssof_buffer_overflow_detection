@@ -11,6 +11,7 @@ global vulnerabilities
 global currentRetOvf
 global formatRegex
 global debug
+global jumppedInst
 
 debug = False
 
@@ -181,6 +182,7 @@ def setup():
     global vulnerabilities
     global currentRetOvf
     global debug
+    global jumppedInst
 
     if len(sys.argv) < 2:
         print "Missing json argument"
@@ -194,6 +196,7 @@ def setup():
     filename_split = os.path.splitext(file_in)
     vulnerabilities = []
     currentRetOvf = None
+    jumppedInst = []
 
     if filename_split[len(filename_split) - 1] != ".json":
         print "Invalid extension"
@@ -208,6 +211,7 @@ def analyse_frame(func, instPos=0):
     global states
     global program
     global debug
+    global jumppedInst
 
     vars = program[func]["variables"]
 
@@ -231,7 +235,14 @@ def analyse_frame(func, instPos=0):
         op = inst["op"]
         handleOp(op, func, inst)
 
+
         if op in ["jmp", "je", "jne", "jz", "jg", "jge", "jl", "jle"]:
+
+            # anti-loops
+            if inst["address"] in jumppedInst:
+                break
+
+            jumppedInst.append(inst["address"])
             instPosJmp = filter(lambda v: v["address"] == inst["args"]["address"], program[func]["instructions"])[0]["pos"]
 
             if op == "jmp":
